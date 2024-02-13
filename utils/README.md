@@ -4,11 +4,11 @@
 This class define the Camera object.
 
 ### Attributes:
-- **camera_parameters_file** (private): input file with the description of the camera
-- **intrinsic_matrix** (private): 3x3 matrix with the intrinsc camera parameters (focal lengths and principal point coordinates)
-- **extrinsic_matrix** (private): 4x4 matrix with the extrinsic camera parameters (rotation matrix, translation vector)
-- **camera_range** (private): 1x2 vector [z_near, z_far], i.e. how close/far the camera can percive objects
-- **camera_resolution** (private): 1x2 vector [width, height]
+- **camera_parameters_file** (protected): input file with the description of the camera
+- **intrinsic_matrix** (protected): 3x3 matrix with the intrinsc camera parameters (focal lengths and principal point coordinates)
+- **extrinsic_matrix** (protected): 4x4 matrix with the extrinsic camera parameters (rotation matrix, translation vector)
+- **camera_range** (protected): 1x2 vector [z_near, z_far], i.e. how close/far the camera can percive objects
+- **camera_resolution** (protected): 1x2 vector [width, height]
 
 ### Methods:
 - **\__init__(camera_parameters_file)** (private): constructor, takes in input the file with the description of the camera parameters in the following format:
@@ -32,9 +32,13 @@ This class define the Camera object.
 
 - **get_extrinsic_matrix()**: returns the extrinsic matrix (camera transform) of the camera.
 
-- **get_camera_range()**: returns the camera range [z_near, z_far]
+- **get_camera_range()**: returns the camera range [z_near, z_far].
 
-- **get_camera_resolution()**: returns the camera resolution [width, height]
+- **get_camera_resolution()**: returns the camera resolution [width, height].
+
+- **pixel_to_camera(image_point)***: takes in input a 2D point in the image plane and return the corresponding 3D point in the camera frame.
+
+- **camera_to_world(camera_point)**: takes a 3D point in the camera frame and return the corresponding 3D point in the robot frame.
 
 
 ---

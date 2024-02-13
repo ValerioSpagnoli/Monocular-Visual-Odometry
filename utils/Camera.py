@@ -124,9 +124,6 @@ class Camera:
         - camera_point (np.array): 3D camera coordinates
         '''
         
-        #image_point = [image_point[0], image_point[1], 1]
-        #return np.dot(np.linalg.inv(self._intrinsic_matrix), image_point)
-
         x_ndc = (image_point[0] / self._camera_resolution[0]) * 2 - 1
         y_ndc = 1 - (image_point[1] / self._camera_resolution[1]) * 2
         ndc = np.array([x_ndc, y_ndc, 1])
