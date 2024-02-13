@@ -5,7 +5,7 @@ This class define the Camera object.
 
 ### Attributes:
 - **camera_parameters_file** (private): input file with the description of the camera
-- **intrinsic_matrix** (private): 3x4 matrix with the intrinsc camera parameters (focal lengths and principal point coordinates)
+- **intrinsic_matrix** (private): 3x3 matrix with the intrinsc camera parameters (focal lengths and principal point coordinates)
 - **extrinsic_matrix** (private): 4x4 matrix with the extrinsic camera parameters (rotation matrix, translation vector)
 - **camera_range** (private): 1x2 vector [z_near, z_far], i.e. how close/far the camera can percive objects
 - **camera_resolution** (private): 1x2 vector [width, height]
@@ -28,7 +28,7 @@ This class define the Camera object.
 
 - **__load_camera_parameters()** (private): reads the file 'camera_parameters_file' and saves the camera parameters into the private attribute of the class.
 
-- **get_intrinsic_matrix(camera_matrix=False)**: returns the intrinsic matrix of the camera. If the parameter camera_matrix is set to True return the 3x3 camera matrix.
+- **get_intrinsic_matrix()**: returns the intrinsic matrix (camera matrix) of the camera.
 
 - **get_extrinsic_matrix()**: returns the extrinsic matrix (camera transform) of the camera.
 
