@@ -48,8 +48,8 @@ class Data:
             ground_truth_pose = data[4:7]
 
             trajectories = dict()
-            trajectories['odometry_pose'] = odometry_pose
             trajectories['ground_truth_pose'] = ground_truth_pose
+            trajectories['odometry_pose'] = odometry_pose
 
             trajectory[pose_id] = trajectories
         
@@ -80,15 +80,15 @@ class Data:
         print('Trajectory data: ')
 
         if pose_id is not None:
-            print(f'Pose id: {pose_id}')
-            print(f'  Odometry pose:     {self.__trajectory[pose_id]["odometry_pose"]}')
-            print(f'  Ground truth pose: {self.__trajectory[pose_id]["ground_truth_pose"]}')
+            print(f'pose_id: {pose_id}')
+            print(f'  ground_truth_pose: {self.__trajectory[pose_id]["ground_truth_pose"]}')
+            print(f'  odometry_pose:     {self.__trajectory[pose_id]["odometry_pose"]}')
             return
 
         for key, value in self.__trajectory.items():
-            print(f'Pose id: {key}')
-            print(f'  Odometry pose:     {value["odometry_pose"]}')
-            print(f'  Ground truth pose: {value["ground_truth_pose"]}')   
+            print(f'pose_id: {key}')
+            print(f'  ground_truth_pose: {value["ground_truth_pose"]}')   
+            print(f'  odometry_pose:     {value["odometry_pose"]}')
 
 
 
@@ -153,15 +153,15 @@ class Data:
         print('World data: ')
 
         if landmark_id is not None:
-            print(f'Landmark id: {landmark_id}')
-            print(f'  Landmark position:   {self.__world[landmark_id]["landmark_position"]}')
-            print(f'  Landmark appearance: {self.__world[landmark_id]["landmark_appearance"]}')
+            print(f'landmark_id: {landmark_id}')
+            print(f'  landmark_position:   {self.__world[landmark_id]["landmark_position"]}')
+            print(f'  landmark_appearance: {self.__world[landmark_id]["landmark_appearance"]}')
             return
 
         for key, value in self.__world.items():
-            print(f'Landmark id: {key}')
-            print(f'  Landmark position:   {value["landmark_position"]}')
-            print(f'  Landmark appearance: {value["landmark_appearance"]}')
+            print(f'landmark_id: {key}')
+            print(f'  landmark_position:   {value["landmark_position"]}')
+            print(f'  landmark_appearance: {value["landmark_appearance"]}')
 
 
 
@@ -265,25 +265,25 @@ class Data:
         print('Measurements data: ')
 
         if sequence_id is not None:
-            print(f'Sequence_id: {sequence_id}')
-            print(f'  Ground truth pose: {self.__measurements[sequence_id]["gt_pose"]}')
-            print(f'  Odometry pose:     {self.__measurements[sequence_id]["odom_pose"]}')
+            print(f'sequence_id: {sequence_id}')
+            print(f'  ground_truth_pose: {self.__measurements[sequence_id]["gt_pose"]}')
+            print(f'  odometry_pose:     {self.__measurements[sequence_id]["odom_pose"]}')
             print(f'  Points: ')
             for point_id, point_data in self.__measurements[sequence_id]["points"].items():
-                print(f'    Point id: {point_id}')
-                print(f'      Actual point id: {point_data["actual_point_id"]}')
-                print(f'      Image point:     {point_data["image_point"]}')
-                print(f'      Appearance:      {point_data["appearance"]}')
+                print(f'    point_id: {point_id}')
+                print(f'      actual_point_id: {point_data["actual_point_id"]}')
+                print(f'      image_point:     {point_data["image_point"]}')
+                print(f'      appearance:      {point_data["appearance"]}')
             return
 
         for key, value in self.__measurements.items():
-            print(f'Sequence_id: {key}')
-            print(f'  Ground truth pose: {value["gt_pose"]}')
-            print(f'  Odometry pose:     {value["odom_pose"]}')
+            print(f'sequence_id: {key}')
+            print(f'  ground_truth_pose: {value["gt_pose"]}')
+            print(f'  odometry_pose:     {value["odom_pose"]}')
             print(f'  Points: ')
             for point_id, point_data in value["points"].items():
-                print(f'    Point id: {point_id}')
-                print(f'      Actual point id: {point_data["actual_point_id"]}')
-                print(f'      Image point:     {point_data["image_point"]}')
-                print(f'      Appearance:      {point_data["appearance"]}')
+                print(f'    point_id: {point_id}')
+                print(f'      actual_point_id: {point_data["actual_point_id"]}')
+                print(f'      image_point:     {point_data["image_point"]}')
+                print(f'      appearance:      {point_data["appearance"]}')
             print('-'*50)

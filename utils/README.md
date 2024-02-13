@@ -42,13 +42,27 @@ This class define the Camera object.
 ## Data.py
 This class define the Data object, which contain all the data.
 
-### Attributes:
+### Attributes
+
 - **folder_path** (private): folder path of the directory where are stored the data.
 - **trajectory** (private): trajectory data
 - **world** (private): world data
 - **measurements** (private): measurements data
 
 ### Methods
+
+**Trajectory data**:
+
+The Trajectory data are ground truth data about the motion of the robot. Each row contains:
+- ```pose_id```: tells at which sequence the data has been acquired. Concides with ```sequence_id``` of the Measurement data.
+- ```odometry_pose```: tells which was the estimated pose of the robot in that frame (sequence, pose_id). Coincides with ```odometry_pose``` specified in the measurement data with ```sequence_id=pose_id```.
+- ```ground_truth_pose```: tells which was the real pose of the robot in that frame (sequence, pose_id).Coincides with ```ground_truth_pose``` specified in the measurement data with ```sequence_id=pose_id```.
+
+This set of data must be used **only for the evaluation**.
+
+
+The methods related to the Trajectory data are:
+
 - **\__init__(folder_path='data/')** (private): constuctor, takes in input the folder path of the directory where are stored the data.
   
 - **__load_trajectory_data** (private): reads the file 'trajectory.dat' and saves the trajectory_data into the respective private attribute of the class. The 'trajectory.dat' must be in the following format:
@@ -61,6 +75,18 @@ This class define the Data object, which contain all the data.
 
 - **print_trajectory(pose_id=None)**: prints the trajectory data for a specific pose_id. If no pose_id is given, returns the entire trajectory data.
   
+
+**World data**:
+
+The World data specify the map of the environment where the robot moves. Each row contains:
+- ```landmark_id```: this is the id that identify the landmark. Coincides with ```actual_point_id``` field of the ```point``` data in the measurements data.
+- ```position```: tells the real position of the landmark in the world (global position).
+- ```appearance```: is the descriptor of the features of the landmark. Coincides with ```appearance``` field of the ```point``` data in the measurements data.
+
+This set of data must be **used only for the evaluation**.
+
+The methods releated to the World data are:
+
 - **__load_world__data** (private): reads the file 'world.dat' and saves the world_data into the respective private attribute of the class. The 'world.dat' file must be in the following format:
     ```
     <landmark_id> <x y z> <appearance_1> ... <appearance_10>
@@ -73,6 +99,21 @@ This class define the Data object, which contain all the data.
 
 - **print_world(landmark_id=None)**: prints the world data for a specific landmark_id. If no landmark_id is given, returns the entire world data.
   
+
+**Measurements data**:
+
+The Measurements data specify which are the measurement done by the robot in a specific squence. Each file contains:
+- ```squence_id```: tells at which sequence the data has been acquired. Concides with ```pose_id``` of the Trajectory data.
+- ```ground_truth_pose```: tells which was the real pose of the robot in that sequence. Coincides with ```ground_truth_pose``` specified in the measurement data with ```pose_id=sequence_id```.
+- ```odometry_pose```: tells which was the estimated pose of the robot in that sequence. Coincides with ```odometry_pose``` specified in the measurement data with ```pose_id=sequence_id```. 
+- Set of points (landmarks) seen by the robot in that sequence:
+  - ```point_id```: is the id of the landmark for that computation squence of the robot. Indeed, is a number that starts always from 0 at each measurements, and grows incrementally.
+    - ```actual_point_id```: is the real id  of the landmark. Coincides with ```landmark_id``` of the world data.
+    - ```image_point```: represent the pair [row, col] where the landmark was observed in the camera in that sequence.
+    - ```appearance```: is the description of the features of the landmark. Coincides with ```appearance``` field of the World data, where ```landmark_id=actual_point_id```.
+
+The methods releated to the Measurements data are: 
+
 - **__load_measurements_data** (private): reads all the files 'meas-xxxxx.dat' and saves the measurements_data into the respective private attribute of the class. Each 'meas-xxxxx.dat' file must be in the following format:
     ```
     seq: <squence number>
