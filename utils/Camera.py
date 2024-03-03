@@ -16,13 +16,15 @@ class Camera:
     def __init__(self, camera_parameters_file):
 
         self.__camera_parameters_file = camera_parameters_file
-        self._intrinsic_matrix, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
+        self.camera_matrix, self._intrinsic_matrix, self.camera_transform, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
 
     def __load_camera_parameters(self):
         logger.info(f'Loading camera parameters from {self.__camera_parameters_file}')
         start = time.time()
 
-        intrinsic_matrix = np.zeros((3, 3), dtype=float)
+        camera_matrix = np.zeros((3, 3), dtype=float)   
+        intrinsic_matrix = np.zeros((3, 4), dtype=float)
+        camera_transform = np.zeros((4, 4), dtype=float)
         extrinsic_matrix = np.zeros((4, 4), dtype=float)
         camera_range = np.zeros(2, dtype=float)
         camera_resolution = np.zeros(2, dtype=int)
@@ -35,15 +37,20 @@ class Camera:
 
         for line in data:
             if line.startswith('camera matrix:'):
-                camera_matrix = np.zeros((3, 3))
                 for i in range(3):
                     values = data[data.index(line) + i + 1].split()
-                    intrinsic_matrix[i] = [float(value) for value in values]
+                    camera_matrix[i] = [float(value) for value in values]
+                intrinsic_matrix[:3, :3] = camera_matrix
 
             elif line.startswith('cam_transform:'):
+                camera_transform = np.zeros((4, 4))
                 for i in range(4):
                     values = data[data.index(line) + i + 1].split()
-                    extrinsic_matrix[i] = [float(value) for value in values]
+                    camera_transform[i] = [float(value) for value in values]
+
+                extrinsic_matrix[:3, :3] = np.array(camera_transform[:3, :3]).T
+                extrinsic_matrix[:3, 3] = -np.dot(np.array(camera_transform[:3, :3]).T, np.array(camera_transform[:3, 3]))
+                extrinsic_matrix[3, 3] = 1
 
             elif line.startswith('z_near'):
                 camera_range[0] = float(line.split()[1])
@@ -56,16 +63,16 @@ class Camera:
                 camera_resolution[1] = int(line.split()[1])
 
         logger.info(f'{(time.time() - start):.2f}s - Camera parameters loaded successfully.')
-        return intrinsic_matrix, extrinsic_matrix, camera_range, camera_resolution
+        return camera_matrix, intrinsic_matrix, camera_transform, extrinsic_matrix, camera_range, camera_resolution
 
 
     #* GETTERS
     #* ------------------------------------------------------------------------------------- #
 
-    def get_intrinsic_matrix(self):
-        
+    def get_camera_matrix(self):
+            
         '''
-        Returns the intrinsic matrix of the camera:
+        Returns the camera matrix of the camera:
 
         [ fx  0 cx ]\\
         [  0 fy cy ]\\
@@ -76,16 +83,47 @@ class Camera:
         - cx, cy: principal point coordinates
         '''
 
+        return self.camera_matrix
+
+    def get_intrinsic_matrix(self):
+        
+        '''
+        Returns the intrinsic matrix of the camera:
+
+        [ fx  0 cx 0 ]\\
+        [  0 fy cy 0 ]\\
+        [  0  0  1 0 ]
+
+        where: 
+        - fx, fy: focal lengths in x and y directions
+        - cx, cy: principal point coordinates
+        '''
+
         return self._intrinsic_matrix
     
+
+    def get_camera_transform(self):
+            
+        '''
+        Returns the camera transform of the camera:
+
+        [ R | t ]\\
+        [ 0 | 1 ]
+
+        where:
+        - R: rotation matrix (3x3)
+        - t: translation vector (3x1)
+        '''
+
+        return self.camera_transform
 
     def get_extrinsic_matrix(self):
         
         '''
         Returns the extrinsic matrix (camera transform) of the camera:
             
-        [ R | t ]\\
-        [ 0 | 1 ]
+        [ R | -R*t ]\\
+        [ 0 |    1 ]
     
         where:
         - R: rotation matrix (3x3)
@@ -136,12 +174,38 @@ class Camera:
     def camera_to_world(self, camera_point):
         '''
         Returns the world coordinates of a point in the camera frame.
+        # compute the relative motion between meas_0 and meas_1
+        gt_pose_0, odom_pose_0, points_0 = compute_points(meas_0)
+        gt_pose_1, odom_pose_1, points_1 = compute_points(meas_1)
 
-        Parameters:
-        - camera_point (np.array): 3D camera coordinates
+        matches = data_association(points_0, points_1)
+        set1 = np.array([matches[key][0] for key in matches])
+        set2 = np.array([matches[key][1] for key in matches])
 
+        R, t = compute_R_t(set1, set2)
+        print('R:', R)
+        print('t:', t)
         Returns:
         - world_point (np.array): 3D world coordinates
         '''
         camera_point = [camera_point[0], camera_point[1], camera_point[2], 1]
         return np.dot(self._extrinsic_matrix, camera_point)[:3]
+
+
+    def world_to_pixel_projection(self, world_point):
+        '''
+        Returns the pixel coordinates of a point in the world frame.
+
+        Parameters:
+        - world_point (np.array): 3D world coordinates
+
+        Returns:
+        - pixel_point (np.array): 2D pixel coordinates
+        '''
+
+        world_point_hom = np.array([world_point[0], world_point[1], world_point[2], 1])
+        camera_point = np.dot(self._extrinsic_matrix, world_point_hom)
+        image_point = np.dot(self._intrinsic_matrix, camera_point)
+        u = image_point[0] / image_point[2]
+        v = image_point[1] / image_point[2]
+        return [u, v]

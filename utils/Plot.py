@@ -1,7 +1,7 @@
 import plotly.graph_objects as go
 
 class Plot:
-    def __init__(self, title=None):
+    def __init__(self, title=None, cut_axis=True):
         self.fig = go.Figure()
         if title is not None:
             self.title = title
@@ -21,6 +21,8 @@ class Plot:
             self.font_size = 30
 
         self.tajectories = []
+
+        self.cut_axis = cut_axis
         self.x_range = [0, 0]
         self.y_range = [0, 0]
         self.z_range = [0, 0]
@@ -37,13 +39,13 @@ class Plot:
         min_z = min([pose[2] for pose in poses])
         max_z = max([pose[2] for pose in poses])
 
-        r_xy = (max_x - min_x) / (max_y - min_y)
-        r_xz = (max_x - min_x) / (max_z - min_z)
+        # r_xy = (max_x - min_x) / (max_y - min_y)
+        # r_xz = (max_x - min_x) / (max_z - min_z)
 
-        min_y = min_y*r_xy
-        max_y = max_y*r_xy
-        min_z = min_z*r_xz
-        max_z = max_z*r_xz
+        # min_y = min_y*r_xy
+        # max_y = max_y*r_xy
+        # min_z = min_z*r_xz
+        # max_z = max_z*r_xz
 
         self.x_range = [min_x, max_x]
         self.y_range = [min_y, max_y]
@@ -139,16 +141,32 @@ class Plot:
             #         yanchor="top"
             #     )
             # ],
-            scene=dict(
-                xaxis = dict(range=self.x_range),
-                yaxis = dict(range=self.y_range),
-                zaxis = dict(range=self.z_range),
-                camera=dict(
-                    center=dict(x=-0.2, y=0.2, z=-0.15) 
-                ),
-                aspectmode='cube'
-            )
         )
+
+        if self.cut_axis:
+            self.fig.update_layout(
+                scene=dict(
+                    xaxis = dict(range=self.x_range),
+                    yaxis = dict(range=self.y_range),
+                    zaxis = dict(range=self.z_range),
+                    camera=dict(
+                        center=dict(x=-0.2, y=0.2, z=-0.15) 
+                    ),
+                    aspectmode='cube'
+                )
+            )
+        else:
+            self.fig.update_layout(
+                scene=dict(
+                    xaxis = dict(autorange=True),
+                    yaxis = dict(autorange=True),
+                    zaxis = dict(autorange=True),
+                    camera=dict(
+                        center=dict(x=-0.2, y=0.2, z=-0.15)
+                    ),
+                    aspectmode='cube'
+                )
+            )
 
 
         self.fig.show()
