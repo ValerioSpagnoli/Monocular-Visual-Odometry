@@ -16,7 +16,7 @@ class Camera:
     def __init__(self, camera_parameters_file):
 
         self.__camera_parameters_file = camera_parameters_file
-        self.camera_matrix, self._intrinsic_matrix, self.camera_transform, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
+        self._camera_matrix, self._intrinsic_matrix, self._camera_transform, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
 
     def __load_camera_parameters(self):
         logger.info(f'Loading camera parameters from {self.__camera_parameters_file}')
@@ -83,7 +83,7 @@ class Camera:
         - cx, cy: principal point coordinates
         '''
 
-        return self.camera_matrix
+        return self._camera_matrix
 
     def get_intrinsic_matrix(self):
         
@@ -115,7 +115,7 @@ class Camera:
         - t: translation vector (3x1)
         '''
 
-        return self.camera_transform
+        return self._camera_transform
 
     def get_extrinsic_matrix(self):
         
@@ -152,16 +152,6 @@ class Camera:
     
 
     def pixel_to_camera(self, image_point):
-        '''
-        Returns the camera coordinates of a point in the image plane.
-
-        Parameters:
-        - image_point (np.array): 2D pixel coordinates
-        
-        Returns:
-        - camera_point (np.array): 3D camera coordinates
-        '''
-        
         x_ndc = (image_point[0] / self._camera_resolution[0]) * 2 - 1
         y_ndc = 1 - (image_point[1] / self._camera_resolution[1]) * 2
         ndc = np.array([x_ndc, y_ndc, 1])
@@ -172,22 +162,6 @@ class Camera:
 
         
     def camera_to_world(self, camera_point):
-        '''
-        Returns the world coordinates of a point in the camera frame.
-        # compute the relative motion between meas_0 and meas_1
-        gt_pose_0, odom_pose_0, points_0 = compute_points(meas_0)
-        gt_pose_1, odom_pose_1, points_1 = compute_points(meas_1)
-
-        matches = data_association(points_0, points_1)
-        set1 = np.array([matches[key][0] for key in matches])
-        set2 = np.array([matches[key][1] for key in matches])
-
-        R, t = compute_R_t(set1, set2)
-        print('R:', R)
-        print('t:', t)
-        Returns:
-        - world_point (np.array): 3D world coordinates
-        '''
         camera_point = [camera_point[0], camera_point[1], camera_point[2], 1]
         return np.dot(self._extrinsic_matrix, camera_point)[:3]
 
@@ -205,7 +179,33 @@ class Camera:
 
         world_point_hom = np.array([world_point[0], world_point[1], world_point[2], 1])
         camera_point = np.dot(self._extrinsic_matrix, world_point_hom)
+
+        # filter camera points on camera range
+        if camera_point[2] < self._camera_range[0] or camera_point[2] > self._camera_range[1]:
+            return None
+
         image_point = np.dot(self._intrinsic_matrix, camera_point)
+
         u = image_point[0] / image_point[2]
         v = image_point[1] / image_point[2]
+
+        if u < 0 or u > self._camera_resolution[0] or v < 0 or v > self._camera_resolution[1]:
+            return None
+        
         return [u, v]
+    
+    def pixel_to_world_projection(self, image_point, depth, pose):
+        
+        t = self._camera_transform[:3, 3]
+        R = self._camera_transform[:3, :3]
+        
+        image_point_hom = np.array([image_point[0], image_point[1], 1])
+        camera_point = np.dot(np.linalg.inv(self._camera_matrix), image_point_hom)
+        world_point = t + np.dot(R, camera_point)
+
+        robot_pose = np.array(pose).T
+        camera_pose = t + np.dot(R, robot_pose)
+        vector = (world_point - camera_pose) / np.linalg.norm(world_point - camera_pose)
+        estimated_world_point = camera_pose + depth*vector
+
+        return estimated_world_point
