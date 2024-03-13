@@ -61,6 +61,17 @@ class Data:
 
         '''
         Returns the trajectory data for a specific pose id. If no pose id is given, returns the entire trajectory data.
+
+        Parameters:
+        - pose_id (int, optional): The pose id for which the trajectory data is to be returned.
+
+        Trajectory data structure:
+        {
+            pose_id: {
+                'ground_truth_pose': [x, y, z],
+                'odometry_pose': [x, y, z]
+            }
+        }
         '''
 
         if pose_id is not None:
@@ -134,6 +145,17 @@ class Data:
 
         '''
         Returns the world data for a specific landmark id. If no landmark id is given, returns the entire world data.
+
+        Parameters:
+        - landmark_id (int, optional): The landmark id for which the world data is to be returned.
+
+        World data structure:
+        {
+            landmark_id: {
+                'landmark_position': [x, y, z],
+                'landmark_appearance': [r, g, b]
+            }
+        }
         '''
 
         if landmark_id is not None:
@@ -246,12 +268,54 @@ class Data:
         
         '''
         Returns the measurements data for a specific sequence_id. If no sequence_id is given, returns the entire measurements data.
+
+        Parameters:
+        - sequence_id (int, optional): The sequence_id for which the measurements data is to be returned.
+
+        Measurements data structure:
+        {
+            sequence_id: {
+                'gt_pose': [x, y, z],
+                'odom_pose': [x, y, z],
+                'points': {
+                    point_id: {
+                        'actual_point_id': int,
+                        'image_point': [x, y],
+                        'appearance': [r, g, b]
+                    }
+                }
+            }
+        }
         '''
 
         if sequence_id is not None:
             return self.__measurements[sequence_id]
         return self.__measurements
     
+
+    def get_measurement_points(self, sequence_id):
+        """
+        Get the measurement points for a given sequence ID.
+
+        Args:
+            sequence_id (int): The ID of the sequence.
+
+        Returns:
+            dict: A dictionary containing the measurement points and their appearance.
+
+        """
+        meas = self.__measurements[sequence_id]
+
+        set = {'points':[], 'appearance':[]}
+
+        for i in range(len(meas['points'])):
+            point = meas['points'][i]
+            set['points'].append(point['image_point'])
+            set['appearance'].append(point['appearance'])
+
+        return set
+
+
 
     def print_measurements(self, sequence_id=None):
         

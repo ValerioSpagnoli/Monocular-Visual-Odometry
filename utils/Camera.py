@@ -150,62 +150,49 @@ class Camera:
 
         return self._camera_resolution
     
+    
+    def project(self, world_point):
+        """
+        Projects a 3D world point onto the camera image plane.
 
-    def pixel_to_camera(self, image_point):
-        x_ndc = (image_point[0] / self._camera_resolution[0]) * 2 - 1
-        y_ndc = 1 - (image_point[1] / self._camera_resolution[1]) * 2
-        ndc = np.array([x_ndc, y_ndc, 1])
-
-        inv_intrinsic = np.linalg.inv(self._intrinsic_matrix)
-
-        return np.dot(inv_intrinsic, ndc)
-
-        
-    def camera_to_world(self, camera_point):
-        camera_point = [camera_point[0], camera_point[1], camera_point[2], 1]
-        return np.dot(self._extrinsic_matrix, camera_point)[:3]
-
-
-    def world_to_pixel_projection(self, world_point):
-        '''
-        Returns the pixel coordinates of a point in the world frame.
-
-        Parameters:
-        - world_point (np.array): 3D world coordinates
+        Args:
+            world_point (numpy.ndarray): The 3D world point to be projected.
 
         Returns:
-        - pixel_point (np.array): 2D pixel coordinates
-        '''
-
-        world_point_hom = np.array([world_point[0], world_point[1], world_point[2], 1])
-        camera_point = np.dot(self._extrinsic_matrix, world_point_hom)
-
-        # filter camera points on camera range
-        if camera_point[2] < self._camera_range[0] or camera_point[2] > self._camera_range[1]:
-            return None
-
-        image_point = np.dot(self._intrinsic_matrix, camera_point)
-
-        u = image_point[0] / image_point[2]
-        v = image_point[1] / image_point[2]
-
-        if u < 0 or u > self._camera_resolution[0] or v < 0 or v > self._camera_resolution[1]:
-            return None
+            numpy.ndarray: The normalized image coordinates of the projected point, or [-1, -1] if the point is outside the camera's range or image resolution.
+        """
+        world_point_hom = np.append(world_point, 1)
         
-        return [u, v]
+        camera_point_hom = np.dot(self._extrinsic_matrix, world_point_hom)
+        camera_point = (camera_point_hom / camera_point_hom[3])[:3]
+        
+        [z_near, z_far] = self._camera_range
+        if camera_point[2] < z_near or camera_point[2] > z_far:
+            return [-1, -1]
+        
+        image_point = np.dot(self._camera_matrix, camera_point)
+        image_point_norm = (image_point / image_point[2])[:2]
+        
+        [width, height] = self._camera_resolution
+        if image_point_norm[0] < 0 or image_point_norm[0] > width or image_point_norm[1] < 0 or image_point_norm[1] > height:
+            return [-1, -1]
+        
+        return image_point_norm
     
-    def pixel_to_world_projection(self, image_point, depth, pose):
-        
-        t = self._camera_transform[:3, 3]
-        R = self._camera_transform[:3, :3]
-        
-        image_point_hom = np.array([image_point[0], image_point[1], 1])
-        camera_point = np.dot(np.linalg.inv(self._camera_matrix), image_point_hom)
-        world_point = t + np.dot(R, camera_point)
 
-        robot_pose = np.array(pose).T
-        camera_pose = t + np.dot(R, robot_pose)
-        vector = (world_point - camera_pose) / np.linalg.norm(world_point - camera_pose)
-        estimated_world_point = camera_pose + depth*vector
+    # def pixel_to_world_projection(self, image_point, depth, pose):
+        
+    #     t = self._camera_transform[:3, 3]
+    #     R = self._camera_transform[:3, :3]
+        
+    #     image_point_hom = np.array([image_point[0], image_point[1], 1])
+    #     camera_point = np.dot(np.linalg.inv(self._camera_matrix), image_point_hom)
+    #     world_point = t + np.dot(R, camera_point)
 
-        return estimated_world_point
+    #     robot_pose = np.array(pose).T
+    #     camera_pose = t + np.dot(R, robot_pose)
+    #     vector = (world_point - camera_pose) / np.linalg.norm(world_point - camera_pose)
+    #     estimated_world_point = camera_pose + depth*vector
+
+    #     return estimated_world_point
+    
