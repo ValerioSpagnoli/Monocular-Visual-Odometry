@@ -1,11 +1,14 @@
 import numpy as np
 import cv2
 
+from utils import math
+
 class VisualOdometry:
     def __init__(self, camera, data):
         self.camera = camera
         self.data = data
-        self.map = None
+        self.map = []
+        self.trajectory = {'poses':[], 'world_points':[]}
 
     def data_association(self, set_1, set_2):
 
@@ -34,13 +37,8 @@ class VisualOdometry:
         return matches
 
 
-    def Rt2T(self, R, t):
-        T = np.eye(4)
-        T[:3,:3] = R
-        T[:3,3] = t.T
-        return T
 
-
+    # TODO: add the appearance of the points to the map 
     def initialize(self):
 
         #* Pose of the camera w.r.t. the robot
@@ -59,22 +57,20 @@ class VisualOdometry:
         set_1 = np.array(matches['points_2'])
 
 
-
         #* RECOVER POSE
 
         #* Pose of the camera in frame 0 w.r.t. the world frame
         R_0 = np.eye(3)
         t_0 = np.zeros((3, 1))
-        T_0 = self.Rt2T(R_0, t_0)
+        T_0 = math.Rt2T(R_0, t_0)
 
         #* Pose of the camera in frame 1 w.r.t. camera in frame 0
         E, _ = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=1.0)
         _, R_0_1, t_0_1, _ = cv2.recoverPose(E, set_0, set_1, self.camera.get_camera_matrix())
-        T_0_1 = self.Rt2T(R_0_1, t_0_1)
+        T_0_1 = math.Rt2T(R_0_1, t_0_1)
 
         #* Pose of the camera in frame 1 w.r.t. the world frame
         T_1 = np.dot(-np.linalg.inv(C), T_0_1)
-
 
 
         #* TRIANGULATE POINTS
@@ -93,3 +89,57 @@ class VisualOdometry:
         world_points = (world_points_hom / world_points_hom[3])[:3].T
         
         return T_1, world_points
+    
+
+    def error_and_jacobian(self, world_point, image_point):
+        
+        #* Compute the prediction
+        predicted_image_point = self.camera.project(world_point)
+        if predicted_image_point[0] == -1 and predicted_image_point[1] == -1:
+            return None, None
+
+        #* Compute the error
+        error = predicted_image_point - image_point
+
+        #* Compute the Jacobian of the transformation
+        world_point_hom = np.append(world_point, 1)
+        camera_point = np.dot(self.camera.get_extrinsic_matrix(), world_point_hom)
+        camera_point = (camera_point / camera_point[3])[:3]
+        Jr = np.zeros((3, 6))
+        Jr[:3, :3] = np.eye(3)
+        Jr[:3, 3:] = math.skew(-camera_point)
+
+        #* Compute the Jacobian of the projection
+        image_point_hom = np.dot(self.camera.get_camera_matrix(), camera_point)
+        iz = 1.0 / image_point_hom[2]
+        iz2 = iz * iz
+
+        Jp = np.array([
+            [iz, 0, -image_point_hom[0]*iz2],
+            [0, iz, -image_point_hom[1]*iz2]
+        ])
+
+        #* Compute the Jacobian
+        jacobian = np.dot(Jp, np.dot(self.camera.get_camera_matrix(), Jr))
+
+        return error, jacobian
+
+
+    def add_to_map(self, world_points):
+        for point in world_points:
+            self.map.append(point)
+
+    def add_to_trajectory(self, T, world_points):
+        self.trajectory['poses'].append(T)
+        self.trajectory['world_points'].append(world_points)
+
+    def update_state(self, T, world_points):
+        self.add_to_map(world_points)
+        self.add_to_trajectory(T, world_points)
+
+    def get_map(self):
+        return self.map
+    
+    def get_trajectory(self, only_poses=False):
+        if only_poses: return self.trajectory['poses']
+        return self.trajectory
