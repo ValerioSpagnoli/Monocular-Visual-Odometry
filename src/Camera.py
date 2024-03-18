@@ -1,4 +1,3 @@
-import time
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -11,6 +10,8 @@ logger.handlers.clear()
 logger.addHandler(handler)
 
 import numpy as np
+from . import utils
+
 
 class Camera:
     def __init__(self, camera_parameters_file):
@@ -20,7 +21,7 @@ class Camera:
 
     def __load_camera_parameters(self):
         logger.info(f'Loading camera parameters from {self.__camera_parameters_file}')
-        start = time.time()
+        start = utils.get_time()
 
         camera_matrix = np.zeros((3, 3), dtype=float)   
         intrinsic_matrix = np.zeros((3, 4), dtype=float)
@@ -62,7 +63,7 @@ class Camera:
             elif line.startswith('height'):
                 camera_resolution[1] = int(line.split()[1])
 
-        logger.info(f'{(time.time() - start):.2f}s - Camera parameters loaded successfully.')
+        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Camera parameters loaded successfully.')
         return camera_matrix, intrinsic_matrix, camera_transform, extrinsic_matrix, camera_range, camera_resolution
 
 

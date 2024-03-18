@@ -1,7 +1,18 @@
+import logging
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+
+handler = logging.StreamHandler()
+formatter = logging.Formatter('%(levelname)s - %(message)s')
+handler.setFormatter(formatter)
+
+logger.handlers.clear()
+logger.addHandler(handler)
+
 import numpy as np
 import cv2
 
-import utils
+from . import utils
 
 class VisualOdometry:
     def __init__(self, camera, data):
@@ -33,6 +44,9 @@ class VisualOdometry:
                 - 'points_2': A numpy array of shape (K, 2) representing the matched points from set_2.
                 - 'appearance': A numpy array of shape (K, M) representing the matched appearance features.
         """
+
+        logger.info('Computing data association')
+        start = utils.get_time()
         
         points_1 = set_1['points']
         appearances_1 = set_1['appearance']
@@ -57,8 +71,12 @@ class VisualOdometry:
                     matches_points_2.append(point_2)
                     matches_appearance.append(appearance_1)
                     break   
+
+        matches = {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearance':np.array(matches_appearance)}
         
-        return {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearance':np.array(matches_appearance)}
+        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Data association done.')
+
+        return matches
 
  
     def initialize(self):
@@ -70,6 +88,9 @@ class VisualOdometry:
             with their positions and appearances.
         """
         
+        logger.info('Initializing visual odometry')
+        start = utils.get_time()
+
         #* Pose of the camera w.r.t. the robot
         C = self.camera.get_extrinsic_matrix()
 
@@ -116,6 +137,8 @@ class VisualOdometry:
 
         world_points = {'position': world_points, 'appearance': matches['appearance']}
 
+        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
+
         return T_1, world_points
     
 
@@ -131,6 +154,9 @@ class VisualOdometry:
             error (numpy.ndarray): The difference between the predicted image point and the actual image point.
             jacobian (numpy.ndarray): The Jacobian matrix representing the partial derivatives of the error with respect to the transformation parameters.
         """
+
+        logger.info('Computing error and Jacobian')
+        start = utils.get_time()    
 
         #* Compute the prediction
         predicted_image_point = self.camera.project(world_point)
@@ -160,6 +186,8 @@ class VisualOdometry:
 
         #* Compute the Jacobian
         jacobian = np.dot(Jp, np.dot(self.camera.get_camera_matrix(), Jr))
+
+        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Error and Jacobian computed.')
 
         return error, jacobian
 
@@ -198,6 +226,7 @@ class VisualOdometry:
         self.trajectory['poses'].append(T)
         self.trajectory['world_points'].append(world_points)
 
+
     def update_state(self, T, world_points):
         """
         Updates the state of the visual odometry system.
@@ -212,6 +241,7 @@ class VisualOdometry:
         self._add_to_map(world_points)
         self._add_to_trajectory(T, world_points)
 
+
     def get_map(self):
             """
             Returns the map associated with the VisualOdometry object.
@@ -221,6 +251,7 @@ class VisualOdometry:
             """
             return self.map
     
+
     def get_trajectory(self, only_poses=False):
             """
             Returns the trajectory of the visual odometry.

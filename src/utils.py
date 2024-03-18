@@ -1,4 +1,5 @@
 import numpy as np
+import time
 
 def skew(v):
     return np.array([
@@ -12,3 +13,9 @@ def Rt2T(R, t):
     T[:3,:3] = R
     T[:3,3] = t.T
     return T
+
+def get_time(in_seconds=False):
+    if in_seconds:
+        return time.time()
+    else:
+        return time.time()*1000

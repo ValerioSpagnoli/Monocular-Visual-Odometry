@@ -1,5 +1,4 @@
 import os
-import time
 import logging
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -10,6 +9,8 @@ handler.setFormatter(formatter)
 
 logger.handlers.clear()
 logger.addHandler(handler)
+
+from . import utils
 
 class Data:
 
@@ -25,7 +26,7 @@ class Data:
     
     def __load_trajectory_data(self):
         logging.info(f'Loading trajectory data from {self.__folder_path}/trajectory.dat')
-        start = time.time()
+        start = utils.get_time()
 
         try:
             with open(f'{self.__folder_path}/trajectory.dat', 'r') as trajectory_file:
@@ -53,7 +54,7 @@ class Data:
 
             trajectory[pose_id] = trajectories
         
-        logging.info(f'{(time.time()-start):.2f} [s] - Trajectory data loaded successfully!')
+        logging.info(f'{(utils.get_time()-start):.2f} [ms] - Trajectory data loaded successfully!')
         return trajectory
     
 
@@ -109,7 +110,7 @@ class Data:
             
     def __load_world_data(self):
         logging.info(f'Loading world data from {self.__folder_path}/world.dat')
-        start = time.time()
+        start = utils.get_time()
 
         try:
             with open(f'{self.__folder_path}/world.dat', 'r') as world_file:
@@ -137,7 +138,7 @@ class Data:
 
             world[landmark_id] = landmarks
             
-        logging.info(f'{(time.time()-start):.2f} [s] - World data loaded successfully!')
+        logging.info(f'{(utils.get_time()-start):.2f} [ms] - World data loaded successfully!')
         return world
 
 
@@ -193,7 +194,7 @@ class Data:
 
     def __load_measurements_data(self):
         logging.info(f'Loading measurements data from {self.__folder_path}/meas-*.dat')
-        start = time.time()
+        start = utils.get_time()
 
         files = os.listdir("data/")
         files = [f for f in files if f.startswith("meas-")]
@@ -260,7 +261,7 @@ class Data:
                     'points': points
                 }
 
-        logging.info(f'{(time.time()-start):.2f} [s] - Measurements data loaded successfully!')
+        logging.info(f'{(utils.get_time()-start):.2f} [ms] - Measurements data loaded successfully!')
         return measurements 
 
 
