@@ -14,11 +14,15 @@ import cv2
 from . import utils
 
 class VisualOdometry:
-    def __init__(self, camera, data):
+    def __init__(self, camera, data, kernel_threshold=1000, damping_factor=1, min_number_of_inliers=0):
         self.camera = camera
         self.data = data
-        self.map = {'position':[], 'appearance':[]}
+        self.map = {'points':[], 'appearances':[]}
         self.trajectory = {'poses':[], 'world_points':[]}
+
+        self._kernel_threshold = kernel_threshold
+        self._damping_factor = damping_factor
+        self._min_number_of_inliers = min_number_of_inliers
 
     
     #* ###################################################################################################################### *#
@@ -37,11 +41,11 @@ class VisualOdometry:
         Returns:
             None
         """
-        positions = world_points['position']
-        appearances = world_points['appearance']
+        positions = world_points['points']
+        appearances = world_points['appearances']
         for i in range(len(positions)):
-            self.map['position'].append(positions[i])
-            self.map['appearance'].append(appearances[i])
+            self.map['points'].append(positions[i])
+            self.map['appearances'].append(appearances[i])
 
 
     def _add_to_trajectory(self, T, world_points):
@@ -89,10 +93,10 @@ class VisualOdometry:
         start = utils.get_time()
         
         points_1 = set_1['points']
-        appearances_1 = set_1['appearance']
+        appearances_1 = set_1['appearances']
         
         points_2 = set_2['points']
-        appearances_2 = set_2['appearance']
+        appearances_2 = set_2['appearances']
 
         matches_points_1 = []
         matches_points_2 = []
@@ -101,7 +105,7 @@ class VisualOdometry:
         for i in range(len(points_1)):
             point_1 = points_1[i]
             appearance_1 = appearances_1[i]
-            
+        
             for j in range(len(points_2)):
                 point_2 = points_2[j]
                 appearance_2 = appearances_2[j]
@@ -112,7 +116,7 @@ class VisualOdometry:
                     matches_appearance.append(appearance_1)
                     break   
 
-        matches = {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearance':np.array(matches_appearance)}
+        matches = {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearances':np.array(matches_appearance)}
         
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Data association done.')
 
@@ -140,10 +144,12 @@ class VisualOdometry:
         points_0 = self.data.get_measurement_points(0)
         points_1 = self.data.get_measurement_points(1)
 
+
         #* Data association between the points in frame 0 and frame 1
         matches = self.data_association(points_0, points_1)
         set_0 = matches['points_1']
         set_1 = matches['points_2']
+        appearance = matches['appearances'].tolist()
 
         #* RECOVER POSE
 
@@ -175,7 +181,7 @@ class VisualOdometry:
         #* Normalize the world points
         world_points = (world_points_hom / world_points_hom[3])[:3].T
 
-        world_points = {'position': world_points, 'appearance': matches['appearance']}
+        world_points = {'points': world_points, 'appearances': appearance}
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
@@ -230,9 +236,62 @@ class VisualOdometry:
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Error and Jacobian computed.')
 
         return error, jacobian
+    
+    
+    def linearize(self, matches, keep_outliers):
+        
+        logger.info('Linearizing')
+        start = utils.get_time()
+        
+        H = np.zeros((6, 6))
+        b = np.zeros(6)
+        
+        num_inliers = 0
+        chi_inliers = 0
+        chi_outliers = 0
 
+        # TODO: check that the image points are in 'points_1' and the world points are in 'points_2'
+        image_points = matches['points_1']
+        world_points = matches['points_2']
 
+        for i in range(len(world_points)):
+            world_point = world_points[i]
+            image_point = image_points[i]
 
+            e, J = self.error_and_jacobian(world_point, image_point)
+            if e is None and J is None: continue
+
+            chi = e.dot(e)
+            lambda_ = 1
+            is_inlier = True
+            if chi > self.kernel_threshold:
+                lambda_ = np.sqrt(self.kernel_threshold / chi)
+                is_inlier = False
+                chi_outliers += chi
+            else:
+                chi_inliers += chi
+                num_inliers += 1
+
+            if is_inlier or keep_outliers:
+                H += np.dot(J.T, J) * lambda_
+                b += np.dot(J.T, e) * lambda_
+
+        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Linearization done.')
+
+        return H, b, num_inliers, chi_inliers, chi_outliers
+    
+
+    def one_step(self, matches, keep_outliers=False):
+        H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(matches, keep_outliers)
+        H = H + self._damping_factor * np.eye(6)
+
+        if num_inliers < self._min_number_of_inliers:
+            logger.error('Not enough inliers. Optimization failed.')
+            return None
+        
+        dx = -np.linalg.lstsq(H, b, rcond=None)[0]
+
+        return dx   
 
 
     def update_state(self, T, world_points):
