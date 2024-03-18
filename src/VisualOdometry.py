@@ -11,7 +11,6 @@ logger.addHandler(handler)
 
 import numpy as np
 import cv2
-
 from . import utils
 
 class VisualOdometry:
@@ -21,6 +20,47 @@ class VisualOdometry:
         self.map = {'position':[], 'appearance':[]}
         self.trajectory = {'poses':[], 'world_points':[]}
 
+    
+    #* ###################################################################################################################### *#
+    #* Protected methods
+    
+    def _add_to_map(self, world_points):
+        """
+        Add world points to the map.
+
+        Args:
+            world_points (dict): A dictionary containing the world points.
+                It should have two keys: 'position' and 'appearance'.
+                'position' should be a list of positions, and 'appearance'
+                should be a list of appearances.
+
+        Returns:
+            None
+        """
+        positions = world_points['position']
+        appearances = world_points['appearance']
+        for i in range(len(positions)):
+            self.map['position'].append(positions[i])
+            self.map['appearance'].append(appearances[i])
+
+
+    def _add_to_trajectory(self, T, world_points):
+        """
+        Add a pose and corresponding world points to the trajectory.
+
+        Args:
+            T (numpy.ndarray): The pose to be added to the trajectory.
+            world_points (numpy.ndarray): The corresponding world points.
+
+        Returns:
+            None
+        """
+        self.trajectory['poses'].append(T)
+        self.trajectory['world_points'].append(world_points)
+
+    
+    #* ###################################################################################################################### *#
+    #* Public methods
 
     def data_association(self, set_1, set_2):
         """
@@ -192,39 +232,7 @@ class VisualOdometry:
         return error, jacobian
 
 
-    def _add_to_map(self, world_points):
-        """
-        Add world points to the map.
 
-        Args:
-            world_points (dict): A dictionary containing the world points.
-                It should have two keys: 'position' and 'appearance'.
-                'position' should be a list of positions, and 'appearance'
-                should be a list of appearances.
-
-        Returns:
-            None
-        """
-        positions = world_points['position']
-        appearances = world_points['appearance']
-        for i in range(len(positions)):
-            self.map['position'].append(positions[i])
-            self.map['appearance'].append(appearances[i])
-
-
-    def _add_to_trajectory(self, T, world_points):
-        """
-        Add a pose and corresponding world points to the trajectory.
-
-        Args:
-            T (numpy.ndarray): The pose to be added to the trajectory.
-            world_points (numpy.ndarray): The corresponding world points.
-
-        Returns:
-            None
-        """
-        self.trajectory['poses'].append(T)
-        self.trajectory['world_points'].append(world_points)
 
 
     def update_state(self, T, world_points):
