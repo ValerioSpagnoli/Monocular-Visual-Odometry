@@ -1,7 +1,7 @@
 import numpy as np
 import cv2
 
-from src import math
+import utils
 
 class VisualOdometry:
     def __init__(self, camera, data):
@@ -63,12 +63,12 @@ class VisualOdometry:
         #* Pose of the camera in frame 0 w.r.t. the world frame
         R_0 = np.eye(3)
         t_0 = np.zeros((3, 1))
-        T_0 = math.Rt2T(R_0, t_0)
+        T_0 = utils.Rt2T(R_0, t_0)
 
         #* Pose of the camera in frame 1 w.r.t. camera in frame 0
         E, _ = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=1.0)
         _, R_0_1, t_0_1, _ = cv2.recoverPose(E, set_0, set_1, self.camera.get_camera_matrix())
-        T_0_1 = math.Rt2T(R_0_1, t_0_1)
+        T_0_1 = utils.Rt2T(R_0_1, t_0_1)
 
         #* Pose of the camera in frame 1 w.r.t. the world frame
         T_1 = np.dot(-np.linalg.inv(C), T_0_1)
@@ -110,7 +110,7 @@ class VisualOdometry:
         camera_point = (camera_point / camera_point[3])[:3]
         Jr = np.zeros((3, 6))
         Jr[:3, :3] = np.eye(3)
-        Jr[:3, 3:] = math.skew(-camera_point)
+        Jr[:3, 3:] = utils.skew(-camera_point)
 
         #* Compute the Jacobian of the projection
         image_point_hom = np.dot(self.camera.get_camera_matrix(), camera_point)
