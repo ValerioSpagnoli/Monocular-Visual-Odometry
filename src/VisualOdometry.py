@@ -12,7 +12,28 @@ class VisualOdometry:
 
 
     def data_association(self, set_1, set_2):
+        """
+        Perform data association between two sets of points using the appearances.
 
+        Args:
+            set_1 (dict): The first set of points and appearances.
+                It should have the following keys:
+                - 'points': A numpy array of shape (N, 2) representing the 2D points.
+                - 'appearance': A numpy array of shape (N, M) representing the appearance features.
+
+            set_2 (dict): The second set of points and appearances.
+                It should have the following keys:
+                - 'points': A numpy array of shape (N, 2) representing the 2D points.
+                - 'appearance': A numpy array of shape (N, M) representing the appearance features.
+
+        Returns:
+            dict: A dictionary containing the matched points and appearances.
+                It has the following keys:
+                - 'points_1': A numpy array of shape (K, 2) representing the matched points from set_1.
+                - 'points_2': A numpy array of shape (K, 2) representing the matched points from set_2.
+                - 'appearance': A numpy array of shape (K, M) representing the matched appearance features.
+        """
+        
         points_1 = set_1['points']
         appearances_1 = set_1['appearance']
         
@@ -41,22 +62,27 @@ class VisualOdometry:
 
  
     def initialize(self):
+        """
+        Initializes the visual odometry algorithm.
 
+        Returns:
+            tuple: A tuple containing the camera pose in frame 1 w.r.t. the world frame (T_1) and the world points
+            with their positions and appearances.
+        """
+        
         #* Pose of the camera w.r.t. the robot
         C = self.camera.get_extrinsic_matrix()
-
 
         #* DATA ASSOCIATION
 
         #* Image points in frame 0 and frame 1
         points_0 = self.data.get_measurement_points(0)
         points_1 = self.data.get_measurement_points(1)
-        
+
         #* Data association between the points in frame 0 and frame 1
         matches = self.data_association(points_0, points_1)
-        set_0 = matches['points_1']  
+        set_0 = matches['points_1']
         set_1 = matches['points_2']
-
 
         #* RECOVER POSE
 
@@ -73,16 +99,15 @@ class VisualOdometry:
         #* Pose of the camera in frame 1 w.r.t. the world frame
         T_1 = np.dot(-np.linalg.inv(C), T_0_1)
 
-
         #* TRIANGULATE POINTS
 
         #* Projection matrices of the camera in frame 0 and frame 1
         P1 = np.dot(self.camera.get_intrinsic_matrix(), np.eye(4))
         P2 = np.dot(self.camera.get_intrinsic_matrix(), T_0_1)
-        
+
         #* world points w.r.t. camera in frame 0
         world_points_hom = cv2.triangulatePoints(P1, P2, set_0.T, set_1.T)
-        
+
         #* world points w.r.t. the world frame
         world_points_hom = np.dot(np.linalg.inv(C), world_points_hom)
 
@@ -90,12 +115,23 @@ class VisualOdometry:
         world_points = (world_points_hom / world_points_hom[3])[:3].T
 
         world_points = {'position': world_points, 'appearance': matches['appearance']}
-        
+
         return T_1, world_points
     
 
     def error_and_jacobian(self, world_point, image_point):
-        
+        """
+        Compute the error and Jacobian of the transformation between a world point and its corresponding image point.
+
+        Parameters:
+            world_point (numpy.ndarray): The 3D coordinates of the world point.
+            image_point (numpy.ndarray): The 2D coordinates of the image point.
+
+        Returns:
+            error (numpy.ndarray): The difference between the predicted image point and the actual image point.
+            jacobian (numpy.ndarray): The Jacobian matrix representing the partial derivatives of the error with respect to the transformation parameters.
+        """
+
         #* Compute the prediction
         predicted_image_point = self.camera.project(world_point)
         if predicted_image_point[0] == -1 and predicted_image_point[1] == -1:
@@ -128,7 +164,19 @@ class VisualOdometry:
         return error, jacobian
 
 
-    def add_to_map(self, world_points):
+    def _add_to_map(self, world_points):
+        """
+        Add world points to the map.
+
+        Args:
+            world_points (dict): A dictionary containing the world points.
+                It should have two keys: 'position' and 'appearance'.
+                'position' should be a list of positions, and 'appearance'
+                should be a list of appearances.
+
+        Returns:
+            None
+        """
         positions = world_points['position']
         appearances = world_points['appearance']
         for i in range(len(positions)):
@@ -136,17 +184,55 @@ class VisualOdometry:
             self.map['appearance'].append(appearances[i])
 
 
-    def add_to_trajectory(self, T, world_points):
+    def _add_to_trajectory(self, T, world_points):
+        """
+        Add a pose and corresponding world points to the trajectory.
+
+        Args:
+            T (numpy.ndarray): The pose to be added to the trajectory.
+            world_points (numpy.ndarray): The corresponding world points.
+
+        Returns:
+            None
+        """
         self.trajectory['poses'].append(T)
         self.trajectory['world_points'].append(world_points)
 
     def update_state(self, T, world_points):
-        self.add_to_map(world_points)
-        self.add_to_trajectory(T, world_points)
+        """
+        Updates the state of the visual odometry system.
+
+        Args:
+            T (numpy.ndarray): Transformation matrix representing the camera pose.
+            world_points (list): List of 3D world points observed by the camera.
+
+        Returns:
+            None
+        """
+        self._add_to_map(world_points)
+        self._add_to_trajectory(T, world_points)
 
     def get_map(self):
-        return self.map
+            """
+            Returns the map associated with the VisualOdometry object.
+
+            Returns:
+                The map associated with the VisualOdometry object.
+            """
+            return self.map
     
     def get_trajectory(self, only_poses=False):
-        if only_poses: return self.trajectory['poses']
-        return self.trajectory
+            """
+            Returns the trajectory of the visual odometry.
+
+            Parameters:
+                only_poses (bool): If True, returns only the poses of the trajectory. 
+                                   If False, returns the trajectory and the world points associated at each pose.
+
+            Returns:
+                dict or list: The trajectory of the visual odometry. If only_poses is True, 
+                              returns a list of poses. If only_poses is False, returns the 
+                              entire trajectory as a dictionary.
+            """
+            if only_poses: return self.trajectory['poses']
+            return self.trajectory
