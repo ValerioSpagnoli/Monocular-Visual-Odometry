@@ -1,25 +1,28 @@
 import numpy as np
 import cv2
 
-from utils import math
+from src import math
 
 class VisualOdometry:
     def __init__(self, camera, data):
         self.camera = camera
         self.data = data
-        self.map = []
+        self.map = {'position':[], 'appearance':[]}
         self.trajectory = {'poses':[], 'world_points':[]}
 
-    def data_association(self, set_1, set_2):
 
-        matches = {'points_1':[], 'points_2':[], 'appearance':[]}
+    def data_association(self, set_1, set_2):
 
         points_1 = set_1['points']
         appearances_1 = set_1['appearance']
         
         points_2 = set_2['points']
         appearances_2 = set_2['appearance']
-        
+
+        matches_points_1 = []
+        matches_points_2 = []
+        matches_appearance = []
+
         for i in range(len(points_1)):
             point_1 = points_1[i]
             appearance_1 = appearances_1[i]
@@ -29,16 +32,14 @@ class VisualOdometry:
                 appearance_2 = appearances_2[j]
 
                 if appearance_1 == appearance_2:
-                    matches['points_1'].append(point_1)
-                    matches['points_2'].append(point_2)
-                    matches['appearance'].append(appearance_1)
+                    matches_points_1.append(point_1)
+                    matches_points_2.append(point_2)
+                    matches_appearance.append(appearance_1)
                     break   
+        
+        return {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearance':np.array(matches_appearance)}
 
-        return matches
-
-
-
-    # TODO: add the appearance of the points to the map 
+ 
     def initialize(self):
 
         #* Pose of the camera w.r.t. the robot
@@ -53,8 +54,8 @@ class VisualOdometry:
         
         #* Data association between the points in frame 0 and frame 1
         matches = self.data_association(points_0, points_1)
-        set_0 = np.array(matches['points_1'])  
-        set_1 = np.array(matches['points_2'])
+        set_0 = matches['points_1']  
+        set_1 = matches['points_2']
 
 
         #* RECOVER POSE
@@ -87,6 +88,8 @@ class VisualOdometry:
 
         #* Normalize the world points
         world_points = (world_points_hom / world_points_hom[3])[:3].T
+
+        world_points = {'position': world_points, 'appearance': matches['appearance']}
         
         return T_1, world_points
     
@@ -126,8 +129,12 @@ class VisualOdometry:
 
 
     def add_to_map(self, world_points):
-        for point in world_points:
-            self.map.append(point)
+        positions = world_points['position']
+        appearances = world_points['appearance']
+        for i in range(len(positions)):
+            self.map['position'].append(positions[i])
+            self.map['appearance'].append(appearances[i])
+
 
     def add_to_trajectory(self, T, world_points):
         self.trajectory['poses'].append(T)
