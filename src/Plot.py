@@ -67,6 +67,21 @@ class Plot:
         self.compute_ranges()
         self.fig.add_trace(go.Scatter3d(x=[pose[0] for pose in trajectory], y=[pose[1] for pose in trajectory], z=[pose[2] for pose in trajectory], mode='lines', name=name, line=dict(color=color, width=thickness)))
 
+    def add_points(self, point, name, color, size=5):    
+        """
+        Adds a point to the plot.
+
+        Parameters:
+        - point (list): 3D pose representing the point.
+        - name (str): Name of the point.
+        - color (str): Color of the point.
+
+        Returns:
+        None
+        """
+        self.fig.add_trace(go.Scatter3d(x=[point[0]], y=[point[1]], z=[point[2]], mode='markers', name=name, marker=dict(color=color, size=size)))
+
+
     def show(self):
         """
         Displays the plot.

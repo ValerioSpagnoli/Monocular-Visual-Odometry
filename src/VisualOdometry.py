@@ -1,6 +1,6 @@
 import logging
 logger = logging.getLogger()
-logger.setLevel(logging.INFO)
+logger.setLevel(logging.ERROR)
 
 handler = logging.StreamHandler()
 formatter = logging.Formatter('%(levelname)s - %(message)s')
@@ -17,7 +17,15 @@ class VisualOdometry:
     def __init__(self, camera, data, kernel_threshold=1000, damping_factor=1, min_number_of_inliers=0):
         self.camera = camera
         self.data = data
+        self.current_pose = np.eye(4)
         self.map = {'points':[], 'appearances':[]}
+
+        for i in range(len(self.data.get_world())):
+            landmark_position = self.data.get_world()[i]['landmark_position']
+            landmark_appearances = self.data.get_world()[i]['landmark_appearance']
+            self.map['points'].append(landmark_position)
+            self.map['appearances'].append(landmark_appearances)
+
         self.trajectory = {'poses':[], 'world_points':[]}
 
         self._kernel_threshold = kernel_threshold
@@ -157,6 +165,7 @@ class VisualOdometry:
         R_0 = np.eye(3)
         t_0 = np.zeros((3, 1))
         T_0 = utils.Rt2T(R_0, t_0)
+        T_0 = np.dot(C, T_0)
 
         #* Pose of the camera in frame 1 w.r.t. camera in frame 0
         E, _ = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -164,24 +173,35 @@ class VisualOdometry:
         T_0_1 = utils.Rt2T(R_0_1, t_0_1)
 
         #* Pose of the camera in frame 1 w.r.t. the world frame
-        T_1 = np.dot(-np.linalg.inv(C), T_0_1)
+        T_1 = np.dot(-np.linalg.inv(T_0), T_0_1)
 
-        #* TRIANGULATE POINTS
+        # #* TRIANGULATE POINTS
 
-        #* Projection matrices of the camera in frame 0 and frame 1
-        P1 = np.dot(self.camera.get_intrinsic_matrix(), np.eye(4))
-        P2 = np.dot(self.camera.get_intrinsic_matrix(), T_0_1)
+        # #* Projection matrices of the camera in frame 0 and frame 1
+        # P1 = np.dot(self.camera.get_intrinsic_matrix(), np.eye(4))
+        # P2 = np.dot(self.camera.get_intrinsic_matrix(), T_0_1)
 
-        #* world points w.r.t. camera in frame 0
-        world_points_hom = cv2.triangulatePoints(P1, P2, set_0.T, set_1.T)
+        # #* world points w.r.t. camera in frame 0
+        # world_points_hom = cv2.triangulatePoints(P1, P2, set_0.T, set_1.T)
 
-        #* world points w.r.t. the world frame
-        world_points_hom = np.dot(np.linalg.inv(C), world_points_hom)
+        # #* world points w.r.t. the world frame
+        # world_points_hom = np.dot(np.linalg.inv(C), world_points_hom)
 
-        #* Normalize the world points
-        world_points = (world_points_hom / world_points_hom[3])[:3].T
+        # #* Normalize the world points
+        # world_points = (world_points_hom / world_points_hom[3])[:3].T
 
-        world_points = {'points': world_points, 'appearances': appearance}
+        # world_points = {'points': world_points, 'appearances': appearance}
+
+        # find world points in the map that correspond to the matched points
+        world_points = []
+        for i in range(len(set_0)):
+            for j in range(len(self.map['appearances'])):
+                if appearance[i] == self.map['appearances'][j]:
+                    world_points.append(self.map['points'][j])
+                    break
+
+        #* Update the state
+        self.current_pose = T_1
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
@@ -264,8 +284,8 @@ class VisualOdometry:
             chi = e.dot(e)
             lambda_ = 1
             is_inlier = True
-            if chi > self.kernel_threshold:
-                lambda_ = np.sqrt(self.kernel_threshold / chi)
+            if chi > self._kernel_threshold:
+                lambda_ = np.sqrt(self._kernel_threshold / chi)
                 is_inlier = False
                 chi_outliers += chi
             else:
@@ -282,6 +302,8 @@ class VisualOdometry:
     
 
     def one_step(self, matches, keep_outliers=False):
+        C = self.camera.get_extrinsic_matrix()
+
         H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(matches, keep_outliers)
         H = H + self._damping_factor * np.eye(6)
 
@@ -289,9 +311,12 @@ class VisualOdometry:
             logger.error('Not enough inliers. Optimization failed.')
             return None
         
-        dx = -np.linalg.lstsq(H, b, rcond=None)[0]
-
-        return dx   
+        dx = np.linalg.lstsq(H, -b, rcond=None)[0]
+        T = utils.v2T(dx)
+    
+        self.current_pose = np.dot(T,self.current_pose)
+    
+        self.update_state(self.current_pose, matches['points_2'])
 
 
     def update_state(self, T, world_points):
@@ -305,7 +330,7 @@ class VisualOdometry:
         Returns:
             None
         """
-        self._add_to_map(world_points)
+        # self._add_to_map(world_points)
         self._add_to_trajectory(T, world_points)
 
 
