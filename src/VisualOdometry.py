@@ -11,6 +11,7 @@ logger.addHandler(handler)
 
 import numpy as np
 import cv2
+from scipy.optimize import least_squares
 from . import utils
 
 class VisualOdometry:
@@ -19,7 +20,6 @@ class VisualOdometry:
         self.data = data
         self.current_pose = np.eye(4)
         self.map = {'points':[], 'appearances':[]}
-
         for i in range(len(self.data.get_world())):
             landmark_position = self.data.get_world()[i]['landmark_position']
             landmark_appearances = self.data.get_world()[i]['landmark_appearance']
@@ -51,7 +51,11 @@ class VisualOdometry:
         """
         positions = world_points['points']
         appearances = world_points['appearances']
+
         for i in range(len(positions)):
+            position = positions[i]
+            appearance = appearances[i]
+            if appearance in self.map['appearances']: continue
             self.map['points'].append(positions[i])
             self.map['appearances'].append(appearances[i])
 
@@ -124,7 +128,7 @@ class VisualOdometry:
                     matches_appearance.append(appearance_1)
                     break   
 
-        matches = {'points_1':np.array(matches_points_1), 'points_2':np.array(matches_points_2), 'appearances':np.array(matches_appearance)}
+        matches = {'points_1':matches_points_1, 'points_2':matches_points_2, 'appearances':matches_appearance}
         
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Data association done.')
 
@@ -155,9 +159,9 @@ class VisualOdometry:
 
         #* Data association between the points in frame 0 and frame 1
         matches = self.data_association(points_0, points_1)
-        set_0 = matches['points_1']
-        set_1 = matches['points_2']
-        appearance = matches['appearances'].tolist()
+        set_0 = np.array(matches['points_1'])
+        set_1 = np.array(matches['points_2'])
+        appearances = matches['appearances']
 
         #* RECOVER POSE
 
@@ -165,7 +169,7 @@ class VisualOdometry:
         R_0 = np.eye(3)
         t_0 = np.zeros((3, 1))
         T_0 = utils.Rt2T(R_0, t_0)
-        T_0 = np.dot(C, T_0)
+        self.update_state(T_0, {'points':[], 'appearances':[]})
 
         #* Pose of the camera in frame 1 w.r.t. camera in frame 0
         E, _ = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=1.0)
@@ -173,9 +177,9 @@ class VisualOdometry:
         T_0_1 = utils.Rt2T(R_0_1, t_0_1)
 
         #* Pose of the camera in frame 1 w.r.t. the world frame
-        T_1 = np.dot(-np.linalg.inv(T_0), T_0_1)
+        T_1 = np.dot(T_0, T_0_1)
 
-        # #* TRIANGULATE POINTS
+        #* TRIANGULATE POINTS
 
         # #* Projection matrices of the camera in frame 0 and frame 1
         # P1 = np.dot(self.camera.get_intrinsic_matrix(), np.eye(4))
@@ -190,23 +194,30 @@ class VisualOdometry:
         # #* Normalize the world points
         # world_points = (world_points_hom / world_points_hom[3])[:3].T
 
-        # world_points = {'points': world_points, 'appearances': appearance}
+        # scale = 0.204
+        # world_points = world_points * scale
 
-        # find world points in the map that correspond to the matched points
-        world_points = []
-        for i in range(len(set_0)):
-            for j in range(len(self.map['appearances'])):
-                if appearance[i] == self.map['appearances'][j]:
-                    world_points.append(self.map['points'][j])
-                    break
+        # world_points = {'points': world_points, 'appearances': appearances}
 
         #* Update the state
-        self.current_pose = T_1
+        self.update_state(T_1, {'points':[], 'appearances':[]})
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
-        return T_1, world_points
-    
+
+    def one_step(self, sequence_id):
+        measurements = self.data.get_measurement_points(sequence_id)
+        matches = self.data_association(measurements, self.get_map())
+        image_points = matches['points_1']
+        world_points = matches['points_2']
+        appearances = matches['appearances']
+                                        
+        T_0 = self.current_pose
+        T_0_1, chi_stats, num_inliers = self.linearize(image_points, world_points)
+        T_1 = np.dot(T_0, T_0_1)
+
+        self.update_state(T_1, {'points':[], 'appearances':[]})
+
 
     def error_and_jacobian(self, world_point, image_point):
         """
@@ -225,8 +236,10 @@ class VisualOdometry:
         start = utils.get_time()    
 
         #* Compute the prediction
-        predicted_image_point = self.camera.project(world_point)
+        robot_point = np.dot(np.linalg.inv(self.current_pose), np.append(world_point, 1))[:3]
+        predicted_image_point = self.camera.project(robot_point)
         if predicted_image_point[0] == -1 and predicted_image_point[1] == -1:
+            logger.warning('Point is behind the camera.')
             return None, None
 
         #* Compute the error
@@ -234,31 +247,29 @@ class VisualOdometry:
 
         #* Compute the Jacobian of the transformation
         world_point_hom = np.append(world_point, 1)
-        camera_point = np.dot(self.camera.get_extrinsic_matrix(), world_point_hom)
-        camera_point = (camera_point / camera_point[3])[:3]
-        Jr = np.zeros((3, 6))
-        Jr[:3, :3] = np.eye(3)
-        Jr[:3, 3:] = utils.skew(-camera_point)
+        camera_point_hom = np.dot(self.camera.get_extrinsic_matrix(), world_point_hom)
+        camera_point = (camera_point_hom / camera_point_hom[3])[:3]
+        J_icp = np.zeros((3, 6))
+        J_icp[:3, :3] = np.eye(3)
+        J_icp[:3, 3:] = utils.skew(-np.floor(camera_point))
 
         #* Compute the Jacobian of the projection
         image_point_hom = np.dot(self.camera.get_camera_matrix(), camera_point)
-        iz = 1.0 / image_point_hom[2]
-        iz2 = iz * iz
+        z_inv = 1.0 / image_point_hom[2]
+        z_inv_square = z_inv * z_inv
 
-        Jp = np.array([
-            [iz, 0, -image_point_hom[0]*iz2],
-            [0, iz, -image_point_hom[1]*iz2]
-        ])
+        J_proj = np.array([ [z_inv, 0, -image_point_hom[0]*z_inv_square],
+                            [0, z_inv, -image_point_hom[1]*z_inv_square] ])
 
         #* Compute the Jacobian
-        jacobian = np.dot(Jp, np.dot(self.camera.get_camera_matrix(), Jr))
+        jacobian = np.dot(J_proj, np.dot(self.camera.get_camera_matrix(), J_icp))
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Error and Jacobian computed.')
 
         return error, jacobian
     
     
-    def linearize(self, matches, keep_outliers):
+    def linearize(self, image_points, world_points):
         
         logger.info('Linearizing')
         start = utils.get_time()
@@ -267,56 +278,36 @@ class VisualOdometry:
         b = np.zeros(6)
         
         num_inliers = 0
-        chi_inliers = 0
-        chi_outliers = 0
-
-        # TODO: check that the image points are in 'points_1' and the world points are in 'points_2'
-        image_points = matches['points_1']
-        world_points = matches['points_2']
+        chi_stats = 0
 
         for i in range(len(world_points)):
             world_point = world_points[i]
             image_point = image_points[i]
 
             e, J = self.error_and_jacobian(world_point, image_point)
-            if e is None and J is None: continue
+            if e is None or J is None: continue
 
-            chi = e.dot(e)
-            lambda_ = 1
-            is_inlier = True
+            chi = np.dot(e.T, e)    
             if chi > self._kernel_threshold:
-                lambda_ = np.sqrt(self._kernel_threshold / chi)
-                is_inlier = False
-                chi_outliers += chi
+                e *= np.sqrt(self._kernel_threshold / chi)
+                chi = self._kernel_threshold
             else:
-                chi_inliers += chi
                 num_inliers += 1
 
-            if is_inlier or keep_outliers:
-                H += np.dot(J.T, J) * lambda_
-                b += np.dot(J.T, e) * lambda_
+            chi_stats += chi
+            H += np.dot(J.T, J)
+            b += np.dot(J.T, e)
+
+        H += self._damping_factor * np.eye(6)
+        dx = np.linalg.lstsq(H, -b, rcond=None)[0]
+        T = utils.v2T(dx)
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Linearization done.')
 
-        return H, b, num_inliers, chi_inliers, chi_outliers
-    
-
-    def one_step(self, matches, keep_outliers=False):
-        C = self.camera.get_extrinsic_matrix()
-
-        H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(matches, keep_outliers)
-        H = H + self._damping_factor * np.eye(6)
-
         if num_inliers < self._min_number_of_inliers:
-            logger.error('Not enough inliers. Optimization failed.')
-            return None
-        
-        dx = np.linalg.lstsq(H, -b, rcond=None)[0]
-        T = utils.v2T(dx)
-    
-        self.current_pose = np.dot(T,self.current_pose)
-    
-        self.update_state(self.current_pose, matches['points_2'])
+            return np.eye(4), chi_stats, num_inliers
+
+        return T, chi_stats, num_inliers
 
 
     def update_state(self, T, world_points):
@@ -330,7 +321,8 @@ class VisualOdometry:
         Returns:
             None
         """
-        # self._add_to_map(world_points)
+        self.current_pose = T
+        #self._add_to_map(world_points)
         self._add_to_trajectory(T, world_points)
 
 
