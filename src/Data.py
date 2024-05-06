@@ -307,12 +307,13 @@ class Data:
         """
         meas = self.__measurements[sequence_id]
 
-        set = {'points':[], 'appearances':[]}
+        set = {'points':[], 'appearances':[], 'actual_point_id':[]}
 
         for i in range(len(meas['points'])):
             point = meas['points'][i]
             set['points'].append(point['image_point'])
             set['appearances'].append(point['appearance'])
+            set['actual_point_id'].append(point['actual_point_id'])
 
         return set
 
