@@ -18,6 +18,7 @@ class Camera:
 
         self.__camera_parameters_file = camera_parameters_file
         self._camera_matrix, self._intrinsic_matrix, self._camera_transform, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
+        self._world_in_camera_pose = np.linalg.inv(self._camera_transform)
 
     def __load_camera_parameters(self):
         logger.info(f'Loading camera parameters from {self.__camera_parameters_file}')
@@ -187,6 +188,25 @@ class Camera:
 
         return camera_point_hom, camera_point, image_point_hom, image_point
     
+
+    def project_point(self, world_point):
+        world_point_hom = np.append(world_point, 1)
+        camera_point_hom = np.dot(self._world_in_camera_pose, world_point_hom)
+        camera_point = (camera_point_hom / camera_point_hom[3])[:3]
+        
+        #* point is behind the camera
+        if camera_point[2] <= 0:
+            return None, None, None, None
+        
+        image_point_hom = np.dot(self._camera_matrix, camera_point)
+        image_point = image_point_hom[:2] / image_point_hom[2]
+
+        #* point is outside the camera's field of view
+        if image_point[0] < 0 or image_point[0] >= self._camera_resolution[0] or image_point[1] < 0 or image_point[1] >= self._camera_resolution[1]:
+            return None, None, None, None
+
+        return camera_point_hom, camera_point, image_point_hom, image_point
+
 
     def pixel_to_world_projection(self, image_point, depth, pose):
         
