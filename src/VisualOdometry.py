@@ -15,7 +15,7 @@ from scipy.optimize import least_squares
 from . import utils
 
 class VisualOdometry:
-    def __init__(self, camera, data, kernel_threshold=100000, damping_factor=1, min_number_of_inliers=0):
+    def __init__(self, camera, data, kernel_threshold=1000, damping_factor=1, min_number_of_inliers=0):
         self.camera = camera
         self.data = data
         self.current_pose = np.eye(4)
@@ -215,10 +215,8 @@ class VisualOdometry:
         start = utils.get_time()
 
         #* Pose of the camera in frame 0 w.r.t. the world frame
-        R0 = np.eye(3)
-        t0 = np.zeros((3, 1))
-        T0 = utils.Rt2T(R0, t0)
-        self.update_state(T0, {'points':[], 'appearances':[]})
+        w_T_c0 = np.eye(4)
+        self.update_state(w_T_c0, {'points':[], 'appearances':[]})
 
         #* Pose of the camera w.r.t. the robot
         K = self.camera.get_camera_matrix()
@@ -238,17 +236,16 @@ class VisualOdometry:
         #* Find the essential matrix
         E, _ = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
         _, R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
-        T1 = utils.Rt2T(R, t)
-
-        # E = self.eight_point_algorithm(set_0, set_1, K)
-        # R1, R2, t = self.decompose_essential_matrix(E)
-        # T1 = utils.Rt2T(R2, t)
+        c0_T_c1 = utils.Rt2T(R, t)
+        w_T_c1 = np.dot(w_T_c0, c0_T_c1)
 
         #* Triangulate points
-        world_points = self.triangulate_points(set_0, set_1, T0, T1)
-    
+        world_points = self.triangulate_points(set_0, set_1, w_T_c0, w_T_c1)
+        world_points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
+        world_points = np.dot(world_points_homogeneous, np.linalg.inv(self.camera.get_camera_transform()))[:, :3]
+
         world_points = {'points': world_points, 'appearances': appearances}
-        self.update_state(T1, world_points)
+        self.update_state(w_T_c1, world_points)
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
@@ -264,19 +261,19 @@ class VisualOdometry:
         appearances = matches['appearances']
         print('Number of matches:', len(image_points))
 
-        T_0 = self.current_pose
-        T_0_1, chi_stats, num_inliers = self.linearize(image_points, world_points)
-        T_1 = np.dot(T_0_1, T_0)
+        w_T_c0 = self.current_pose
+        c0_T_c1, chi_stats, num_inliers = self.linearize(image_points, world_points)
+        w_T_c1 = np.dot(w_T_c0, c0_T_c1)
         print(f'Number of inliers: {num_inliers}, Chi stats: {chi_stats}\n')  
         
         matches = self.data_association(prev_measurements, measurements)
         set_0 = np.array(matches['points_1'])
         set_1 = np.array(matches['points_2'])
         appearances = matches['appearances']
-        world_points = self.triangulate_points(set_0, set_1, T_0, T_1)
+        world_points = self.triangulate_points(set_0, set_1, self.current_pose, w_T_c1)
         world_points = {'points': world_points, 'appearances': appearances}
 
-        self.update_state(T_1, world_points)
+        self.update_state(w_T_c1, world_points)
 
 
     def error_and_jacobian(self, world_point, image_point):
@@ -378,9 +375,8 @@ class VisualOdometry:
             None
         """
         self.current_pose = T
-        self.camera._world_in_camera_pose = np.linalg.inv(T)
         self._add_to_map(world_points)
-        self._add_to_trajectory(T, world_points)
+        self._add_to_trajectory(self.current_pose, world_points)
 
 
     def get_map(self):
