@@ -215,8 +215,8 @@ class VisualOdometry:
         start = utils.get_time()
 
         #* Pose of the camera in frame 0 w.r.t. the world frame
-        w_T_c0 = np.eye(4)
-        self.update_state(w_T_c0, {'points':[], 'appearances':[]})
+        T_0 = np.eye(4)
+        self.update_state(T_0, {'points':[], 'appearances':[]})
 
         #* Pose of the camera w.r.t. the robot
         K = self.camera.get_camera_matrix()
@@ -236,16 +236,16 @@ class VisualOdometry:
         #* Find the essential matrix
         E, _ = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
         _, R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
-        c0_T_c1 = utils.Rt2T(R, t)
-        w_T_c1 = np.dot(w_T_c0, c0_T_c1)
+        T_0_1 = utils.Rt2T(R, t)
+        T_1 = np.dot(T_0, T_0_1)
 
         #* Triangulate points
-        world_points = self.triangulate_points(set_0, set_1, w_T_c0, w_T_c1)
+        world_points = self.triangulate_points(set_0, set_1, T_0, T_1)
         world_points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
         world_points = np.dot(world_points_homogeneous, np.linalg.inv(self.camera.get_camera_transform()))[:, :3]
 
         world_points = {'points': world_points, 'appearances': appearances}
-        self.update_state(w_T_c1, world_points)
+        self.update_state(T_1, world_points)
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
@@ -271,6 +271,8 @@ class VisualOdometry:
         set_1 = np.array(matches['points_2'])
         appearances = matches['appearances']
         world_points = self.triangulate_points(set_0, set_1, self.current_pose, w_T_c1)
+        world_points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
+        world_points = np.dot(world_points_homogeneous, np.linalg.inv(self.camera.get_camera_transform()))[:, :3]
         world_points = {'points': world_points, 'appearances': appearances}
 
         self.update_state(w_T_c1, world_points)
