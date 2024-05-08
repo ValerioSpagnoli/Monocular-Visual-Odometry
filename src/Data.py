@@ -69,8 +69,8 @@ class Data:
         Trajectory data structure:
         {
             pose_id: {
-                'ground_truth_pose': [x, y, z],
-                'odometry_pose': [x, y, z]
+                'ground_truth_pose': [x [m], y [m], theta [rad]],
+                'odometry_pose': [x [m], y [m], theta [rad]]
             }
         }
         '''

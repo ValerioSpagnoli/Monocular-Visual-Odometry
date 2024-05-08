@@ -152,60 +152,25 @@ class Camera:
 
         return self._camera_resolution
     
-    
-    def project(self, world_point, robot_pose):
-        """
-        Projects a 3D world point onto the camera image plane.
 
-        Args:
-            world_point (numpy.ndarray): The 3D world point to be projected.
-
-        Returns:
-            numpy.ndarray: The normalized image coordinates of the projected point, or [-1, -1] if the point is outside the camera's range or image resolution.
-        """
-
-        w_T_r = robot_pose
-        r_T_c = self._camera_transform
-        w_T_c = np.dot(w_T_r, r_T_c)
-        c_T_w = np.linalg.inv(w_T_c)
-
-        K = self._camera_matrix
-
-        world_point_hom = np.append(world_point, 1)
-        camera_point_hom = np.dot(c_T_w, world_point_hom)
-        camera_point = (camera_point_hom / camera_point_hom[3])[:3]
-
-        [z_near, z_far] = self._camera_range
-        if camera_point[2] < z_near or camera_point[2] > z_far:
-            return None, None, None, None
-        
-        image_point_hom = np.dot(K, camera_point)
-        image_point = (image_point_hom / image_point_hom[2])[:2]
-        
-        [width, height] = self._camera_resolution
-        if image_point[0] < 0 or image_point[0] > width or image_point[1] < 0 or image_point[1] > height:
-            return None, None, None, None
-
-        return camera_point_hom, camera_point, image_point_hom, image_point
-    
-
-    def project_point(self, world_point):
-        world_point_hom = np.append(world_point, 1)
-        camera_point_hom = np.dot(self._world_in_camera_pose, world_point_hom)
-        camera_point = (camera_point_hom / camera_point_hom[3])[:3]
+    def project_point(self, camera_point):
+        #world_point_hom = np.append(world_point, 1)
+        #camera_point_hom = np.dot(self._world_in_camera_pose, world_point_hom)
+        #camera_point = (camera_point_hom / camera_point_hom[3])[:3]
         
         #* point is behind the camera
-        if camera_point[2] <= 0:
-            return None, None, None, None
+        [z_near, z_far] = self._camera_range    
+        if camera_point[2] <= z_near: # or camera_point[2] >= z_far:
+            return None, None
         
         image_point_hom = np.dot(self._camera_matrix, camera_point)
         image_point = image_point_hom[:2] / image_point_hom[2]
 
         #* point is outside the camera's field of view
         if image_point[0] < 0 or image_point[0] >= self._camera_resolution[0] or image_point[1] < 0 or image_point[1] >= self._camera_resolution[1]:
-            return None, None, None, None
+            return None, None
 
-        return camera_point_hom, camera_point, image_point_hom, image_point
+        return image_point_hom, image_point
 
 
     def pixel_to_world_projection(self, image_point, depth, pose):

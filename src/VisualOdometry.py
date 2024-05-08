@@ -20,12 +20,6 @@ class VisualOdometry:
         self.data = data
         self.current_pose = np.eye(4)
         self.map = {'points':[], 'appearances':[]}
-        # for i in range(len(self.data.get_world())):
-        #     landmark_position = self.data.get_world()[i]['landmark_position']
-        #     landmark_appearances = self.data.get_world()[i]['landmark_appearance']
-        #     self.map['points'].append(landmark_position)
-        #     self.map['appearances'].append(landmark_appearances)
-
         self.trajectory = {'poses':[], 'world_points':[]}
 
         self._kernel_threshold = kernel_threshold
@@ -218,11 +212,6 @@ class VisualOdometry:
         T_0 = np.eye(4)
         self.update_state(T_0, {'points':[], 'appearances':[]})
 
-        #* Pose of the camera w.r.t. the robot
-        K = self.camera.get_camera_matrix()
-
-        #* DATA ASSOCIATION
-
         #* Image points in frame 0 and frame 1
         points_0 = self.data.get_measurement_points(0)
         points_1 = self.data.get_measurement_points(1)
@@ -234,15 +223,14 @@ class VisualOdometry:
         appearances = matches['appearances']
 
         #* Find the essential matrix
-        E, _ = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        _, R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
+        K = self.camera.get_camera_matrix() 
+        E, mask = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
         T_0_1 = utils.Rt2T(R, t)
-        T_1 = np.dot(T_0, T_0_1)
+        T_1 = T_0 @ T_0_1
 
         #* Triangulate points
         world_points = self.triangulate_points(set_0, set_1, T_0, T_1)
-        world_points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
-        world_points = np.dot(world_points_homogeneous, np.linalg.inv(self.camera.get_camera_transform()))[:, :3]
 
         world_points = {'points': world_points, 'appearances': appearances}
         self.update_state(T_1, world_points)
@@ -261,18 +249,22 @@ class VisualOdometry:
         appearances = matches['appearances']
         print('Number of matches:', len(image_points))
 
-        w_T_c0 = self.current_pose
-        c0_T_c1, chi_stats, num_inliers = self.linearize(image_points, world_points)
-        w_T_c1 = np.dot(w_T_c0, c0_T_c1)
-        print(f'Number of inliers: {num_inliers}, Chi stats: {chi_stats}\n')  
-        
+        # w_T_c0 = self.current_pose
+        # c0_T_c1, chi_stats, num_inliers = self.linearize(image_points, world_points)
+        # w_T_c1 = np.dot(w_T_c0, c0_T_c1)
+        # print(f'Number of inliers: {num_inliers}, Chi stats: {chi_stats}\n')  
+
         matches = self.data_association(prev_measurements, measurements)
         set_0 = np.array(matches['points_1'])
         set_1 = np.array(matches['points_2'])
+
+        E, mask = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, set_0, set_1, self.camera.get_camera_matrix())
+        c0_T_c1 = utils.Rt2T(R, t)
+        w_T_c1 = np.dot(self.current_pose, c0_T_c1)
+
         appearances = matches['appearances']
         world_points = self.triangulate_points(set_0, set_1, self.current_pose, w_T_c1)
-        world_points_homogeneous = np.hstack([world_points, np.ones((world_points.shape[0], 1))])
-        world_points = np.dot(world_points_homogeneous, np.linalg.inv(self.camera.get_camera_transform()))[:, :3]
         world_points = {'points': world_points, 'appearances': appearances}
 
         self.update_state(w_T_c1, world_points)
@@ -295,9 +287,8 @@ class VisualOdometry:
         start = utils.get_time()    
 
         #* Compute the prediction
-        # proj_camera_point_hom, proj_camera_point, proj_image_point_hom, proj_image_point = self.camera.project(world_point, self.current_pose)
-        proj_camera_point_hom, proj_camera_point, proj_image_point_hom, proj_image_point = self.camera.project_point(world_point)
-        if proj_camera_point_hom is None or proj_image_point_hom is None or proj_camera_point is None or proj_image_point is None:
+        proj_image_point_hom, proj_image_point = self.camera.project_point(world_point)
+        if proj_image_point_hom is None or proj_image_point is None:
             logger.warning('Point is behind the camera.')
             return None, None
 
@@ -307,7 +298,7 @@ class VisualOdometry:
         #* Compute the Jacobian of the transformation
         J_icp = np.zeros((3, 6))
         J_icp[:3, :3] = np.eye(3)
-        J_icp[:3, 3:] = utils.skew(-np.floor(proj_camera_point))
+        J_icp[:3, 3:] = utils.skew(-np.floor(world_point))
 
         #* Compute the Jacobian of the projection
         z_inv = 1.0 / proj_image_point_hom[2]
