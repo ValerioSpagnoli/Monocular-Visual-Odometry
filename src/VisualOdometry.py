@@ -19,6 +19,8 @@ class VisualOdometry:
         self.camera = camera
         self.data = data
         self.current_pose = np.eye(4)
+        self.initial_pose = np.eye(4)
+        self.current_to_initial_transform = np.eye(4)
         self.map = {'points':[], 'appearances':[]}
         self.trajectory = {'poses':[], 'world_points':[]}
 
@@ -193,7 +195,12 @@ class VisualOdometry:
         points_homogeneous = cv2.triangulatePoints(P0, P1, points_0.T, points_1.T)
         points = (points_homogeneous[:3] / points_homogeneous[3]).T 
 
-        return points
+        triangulated_points = []
+        for point in points:
+            if isinstance(point, np.ndarray) and np.isfinite(point).all():
+                triangulated_points.append(point)
+
+        return np.array(triangulated_points)
 
  
     def initialize(self):
@@ -211,6 +218,7 @@ class VisualOdometry:
         #* Pose of the camera in frame 0 w.r.t. the world frame
         T_0 = np.eye(4)
         self.update_state(T_0, {'points':[], 'appearances':[]})
+        self.initial_pose = T_0
 
         #* Image points in frame 0 and frame 1
         points_0 = self.data.get_measurement_points(0)
@@ -229,6 +237,8 @@ class VisualOdometry:
         T_0_1 = utils.Rt2T(R, t)
         T_1 = T_0 @ T_0_1
 
+        self.current_to_initial_transform = np.linalg.inv(T_1)
+
         #* Triangulate points
         world_points = self.triangulate_points(set_0, set_1, T_0, T_1)
 
@@ -242,32 +252,37 @@ class VisualOdometry:
     def one_step(self, sequence_id):
         prev_measurements = self.data.get_measurement_points(sequence_id - 1)
         measurements = self.data.get_measurement_points(sequence_id)
+        map = self.get_map()
+        K = self.camera.get_camera_matrix()
         
-        matches = self.data_association(measurements, self.get_map())
-        image_points = np.array(matches['points_1'])
-        world_points = np.array(matches['points_2'])
-        appearances = matches['appearances']
-        print('Number of matches:', len(image_points))
+        matches_3D = self.data_association(measurements, map)
+        image_points_3D = np.array(matches_3D['points_1'])
+        world_points_3D = np.array(matches_3D['points_2'])
+        appearances_3D = matches_3D['appearances']
 
-        # w_T_c0 = self.current_pose
-        # c0_T_c1, chi_stats, num_inliers = self.linearize(image_points, world_points)
-        # w_T_c1 = np.dot(w_T_c0, c0_T_c1)
-        # print(f'Number of inliers: {num_inliers}, Chi stats: {chi_stats}\n')  
+        matches_2D = self.data_association(prev_measurements, measurements)
+        images_points_1_2D = np.array(matches_2D['points_1'])
+        images_points_2_2D = np.array(matches_2D['points_2'])
+        appearances_2D = matches_2D['appearances']
+        
+        #** Projective ICP (3D->2D)
+        w_T_c0 = self.current_pose
+        w_T_c1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, w_T_c0)
+        #w_T_c1 = np.dot(w_T_c0, c0_T_c1)
 
-        matches = self.data_association(prev_measurements, measurements)
-        set_0 = np.array(matches['points_1'])
-        set_1 = np.array(matches['points_2'])
+        #** 2D->2D
+        # E, mask = cv2.findEssentialMat(images_points_1_2D, images_points_2_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        # retval , R, t, mask = cv2.recoverPose(E, images_points_1_2D, images_points_2_2D, K)
+        # c0_T_c1 = utils.Rt2T(R, t)
+        # w_T_c1 = np.dot(self.current_pose, c0_T_c1)
 
-        E, mask = cv2.findEssentialMat(set_0, set_1, self.camera.get_camera_matrix(), method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        retval , R, t, mask = cv2.recoverPose(E, set_0, set_1, self.camera.get_camera_matrix())
-        c0_T_c1 = utils.Rt2T(R, t)
-        w_T_c1 = np.dot(self.current_pose, c0_T_c1)
+        trianglulated_points = self.triangulate_points(images_points_1_2D, images_points_2_2D, self.current_pose, w_T_c1)
+        triangulated_points_homogeneous = np.hstack([trianglulated_points, np.ones((trianglulated_points.shape[0], 1))])
+        trianglulated_points = self.current_to_initial_transform @ triangulated_points_homogeneous.T
+        trianglulated_points = trianglulated_points[:3].T
+        trianglulated_points = {'points': trianglulated_points, 'appearances': appearances_2D}
 
-        appearances = matches['appearances']
-        world_points = self.triangulate_points(set_0, set_1, self.current_pose, w_T_c1)
-        world_points = {'points': world_points, 'appearances': appearances}
-
-        self.update_state(w_T_c1, world_points)
+        self.update_state(w_T_c1, trianglulated_points)
 
 
     def error_and_jacobian(self, world_point, image_point):
@@ -286,8 +301,10 @@ class VisualOdometry:
         logger.info('Computing error and Jacobian')
         start = utils.get_time()    
 
+        K = self.camera.get_camera_matrix()
+
         #* Compute the prediction
-        proj_image_point_hom, proj_image_point = self.camera.project_point(world_point)
+        proj_image_point_hom, proj_image_point = self.camera.project_point(world_point, self.current_pose)
         if proj_image_point_hom is None or proj_image_point is None:
             logger.warning('Point is behind the camera.')
             return None, None
@@ -306,52 +323,78 @@ class VisualOdometry:
 
         J_proj = np.array([ [z_inv, 0, -proj_image_point_hom[0]*z_inv_square],
                             [0, z_inv, -proj_image_point_hom[1]*z_inv_square] ])
-
+        
         #* Compute the Jacobian
-        jacobian = np.dot(J_proj, np.dot(self.camera.get_camera_matrix(), J_icp))
+        jacobian = J_proj @ K @ J_icp
+        print('image_point', np.round(image_point, 2))
+        print('proj_image_point', np.round(proj_image_point, 2))
+        print('proj_image_point_hom', np.round(proj_image_point_hom, 2))
+        print('error', np.round(error, 2))
+        print('z_inv_square', np.round(z_inv_square, 2))
+        print('J_icp\n', np.round(J_icp, 2))
+        print('J_proj\n', np.round(J_proj, 2)) 
+        print('J\n', np.round(jacobian, 2))
+        print('==============================================================\n\n')
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Error and Jacobian computed.')
 
         return error, jacobian
     
     
-    def linearize(self, image_points, world_points):
+    def linearize(self, image_points, world_points, T):
         
         logger.info('Linearizing')
         start = utils.get_time()
+
+        T_0 = T
+        chi_stats = []
+        num_inliers = []
+
+        MAX_ITER = 1
+        iteration = 0
+        error = np.inf
+        while (iteration < MAX_ITER) and (error > 1e-2):
         
-        H = np.zeros((6, 6))
-        b = np.zeros(6)
-        
-        num_inliers = 0
-        chi_stats = 0
+            H = np.zeros((6, 6))
+            b = np.zeros(6)
+            
+            num_inliers_ = 0
+            chi_stats_ = 0
 
-        for i in range(len(world_points)):
-            world_point = world_points[i]
-            image_point = image_points[i]
+            for i in range(len(world_points)):
+                world_point = world_points[i]
+                image_point = image_points[i]
 
-            e, J = self.error_and_jacobian(world_point, image_point)
-            if e is None or J is None: continue
+                e, J = self.error_and_jacobian(world_point, image_point)
+                print('##############################################################')
+                if e is None or J is None: continue
+                print('e' , np.round(e, 2))
+                print('J' , np.round(J, 2))
+                print('==============================================================\n\n')
+                error = np.linalg.norm(e)
 
-            chi = np.dot(e.T, e)    
-            if chi > self._kernel_threshold:
-                e *= np.sqrt(self._kernel_threshold / chi)
-                chi = self._kernel_threshold
-            else:
-                num_inliers += 1
+                chi = np.dot(e.T, e)    
+                if chi > self._kernel_threshold:
+                    e *= np.sqrt(self._kernel_threshold / chi)
+                    chi = self._kernel_threshold
+                else:
+                    num_inliers_ += 1
 
-            chi_stats += chi
-            H += np.dot(J.T, J)
-            b += np.dot(J.T, e)
+                chi_stats_ += chi
+                H += np.dot(J.T, J)
+                b += np.dot(J.T, e)
 
-        H += self._damping_factor * np.eye(6)
-        dx = np.linalg.lstsq(H, -b, rcond=None)[0]
-        T = utils.v2T(dx)
+            chi_stats.append(chi_stats_)
+            num_inliers.append(num_inliers_)
+
+            if num_inliers_ >= self._min_number_of_inliers:
+                H += self._damping_factor * np.eye(6)
+                dx = np.linalg.lstsq(H, -b, rcond=None)[0]
+                T = utils.v2T(dx) * T_0
+
+            iteration += 1
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Linearization done.')
-
-        if num_inliers < self._min_number_of_inliers:
-            return np.eye(4), chi_stats, num_inliers
 
         return T, chi_stats, num_inliers
 
@@ -368,6 +411,7 @@ class VisualOdometry:
             None
         """
         self.current_pose = T
+        self.current_to_initial_transform = np.linalg.inv(T)
         self._add_to_map(world_points)
         self._add_to_trajectory(self.current_pose, world_points)
 

@@ -153,17 +153,21 @@ class Camera:
         return self._camera_resolution
     
 
-    def project_point(self, camera_point):
+    def project_point(self, local_camera_point, camera_pose):
         #world_point_hom = np.append(world_point, 1)
         #camera_point_hom = np.dot(self._world_in_camera_pose, world_point_hom)
         #camera_point = (camera_point_hom / camera_point_hom[3])[:3]
+
+        local_camera_point_hom = np.append(local_camera_point, 1)
+        global_camera_point_hom = camera_pose @ local_camera_point_hom
+        global_camera_point = global_camera_point_hom[:3]
         
         #* point is behind the camera
         [z_near, z_far] = self._camera_range    
-        if camera_point[2] <= z_near: # or camera_point[2] >= z_far:
+        if global_camera_point[2] <= z_near: # or camera_point[2] >= z_far:
             return None, None
         
-        image_point_hom = np.dot(self._camera_matrix, camera_point)
+        image_point_hom = self._camera_matrix @ global_camera_point
         image_point = image_point_hom[:2] / image_point_hom[2]
 
         #* point is outside the camera's field of view
