@@ -48,12 +48,17 @@ class VisualOdometry:
         positions = world_points['points']
         appearances = world_points['appearances']
 
+        counter = 0
         for i in range(len(positions)):
             position = positions[i]
             appearance = appearances[i]
-            if appearance in self.map['appearances']: continue
-            self.map['points'].append(positions[i])
-            self.map['appearances'].append(appearances[i])
+            if appearance in self.map['appearances']: 
+                counter += 1
+                continue
+            self.map['points'].append(position)
+            self.map['appearances'].append(appearance)
+
+        print('Number of world points NOT added:', counter)
 
 
     def _add_to_trajectory(self, T, world_points):
@@ -117,7 +122,6 @@ class VisualOdometry:
             for j in range(len(points_2)):
                 point_2 = points_2[j]
                 appearance_2 = appearances_2[j]
-
                 if np.equal(appearance_1, appearance_2).all():
                     matches_points_1.append(point_1)
                     matches_points_2.append(point_2)
@@ -186,14 +190,31 @@ class VisualOdometry:
         """ Triangulate points from two views. """
 
         intrinsic_matrix = self.camera.get_intrinsic_matrix()
+        # camera_matrix = self.camera.get_camera_matrix()
+        # add a column to camera matrix
+        # intrinsic_matrix = np.hstack([camera_matrix, np.zeros((3, 1))])
+
+        # R0 = T0[:3, :3]
+        # R1 = T1[:3, :3]
+        # t0 = T0[:3, 3]
+        # t1 = T1[:3, 3]
+
+        # X0 = np.zeros((3, 4))
+        # X1 = np.zeros((3, 4))
+        # X0[:3, :3] = R0.T
+        # X0[:3, 3] = -np.dot(R0.T, t0)
+        # X1[:3, :3] = R1.T
+        # X1[:3, 3] = -np.dot(R1.T, t1)
 
         #* Projection matrices
-        P0 = np.dot(intrinsic_matrix, T0)
-        P1 = np.dot(intrinsic_matrix, T1)
+        P0 = intrinsic_matrix @ np.linalg.inv(T0)
+        P1 = intrinsic_matrix @ np.linalg.inv(T1)
 
         #* Triangulate points 
         points_homogeneous = cv2.triangulatePoints(P0, P1, points_0.T, points_1.T)
         points = (points_homogeneous[:3] / points_homogeneous[3]).T 
+
+        print('Number of world points triangulated pre:', len(points))
 
         triangulated_points = []
         for point in points:
@@ -234,7 +255,7 @@ class VisualOdometry:
         K = self.camera.get_camera_matrix() 
         E, mask = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
         retval , R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
-        T_0_1 = utils.Rt2T(R, t)
+        T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
         self.current_to_initial_transform = np.linalg.inv(T_1)
@@ -245,7 +266,17 @@ class VisualOdometry:
         world_points = {'points': world_points, 'appearances': appearances}
         self.update_state(T_1, world_points)
 
+        print('Number of points in measurement 0:', len(points_0['appearances']))
+        print('Number of points in measurement 1:', len(points_1['appearances']))
+        print('Number of points in measurement 0 and not in measurement 1: ', len(points_0['appearances']) - len(set_0))
+        print('Number of points in measurement 1 and not in measurement 0: ', len(points_1['appearances']) - len(set_0))
+        print('Number of matches:', len(set_0))
+        print('Number of world points triangulated post:', len(world_points['points']))
+
+
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
+
+        return T_1, world_points
 
 
 
@@ -254,6 +285,10 @@ class VisualOdometry:
         measurements = self.data.get_measurement_points(sequence_id)
         map = self.get_map()
         K = self.camera.get_camera_matrix()
+
+        prev_appearance = prev_measurements['appearances']
+        appearance = measurements['appearances']
+
         
         matches_3D = self.data_association(measurements, map)
         image_points_3D = np.array(matches_3D['points_1'])
@@ -266,23 +301,41 @@ class VisualOdometry:
         appearances_2D = matches_2D['appearances']
         
         #** Projective ICP (3D->2D)
-        w_T_c0 = self.current_pose
-        w_T_c1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, w_T_c0)
+        # w_T_c0 = self.current_pose
+        # w_T_c1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, w_T_c0)
         #w_T_c1 = np.dot(w_T_c0, c0_T_c1)
 
         #** 2D->2D
-        # E, mask = cv2.findEssentialMat(images_points_1_2D, images_points_2_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        # retval , R, t, mask = cv2.recoverPose(E, images_points_1_2D, images_points_2_2D, K)
-        # c0_T_c1 = utils.Rt2T(R, t)
-        # w_T_c1 = np.dot(self.current_pose, c0_T_c1)
+        E, mask = cv2.findEssentialMat(images_points_1_2D, images_points_2_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, images_points_1_2D, images_points_2_2D, K)
+        c0_T_c1 = utils.Rt2T(R, -t)
+        w_T_c1 = self.current_pose @ c0_T_c1
+
+        number_of_world_points_1 = len(self.get_map()['points'])    
 
         trianglulated_points = self.triangulate_points(images_points_1_2D, images_points_2_2D, self.current_pose, w_T_c1)
         triangulated_points_homogeneous = np.hstack([trianglulated_points, np.ones((trianglulated_points.shape[0], 1))])
-        trianglulated_points = self.current_to_initial_transform @ triangulated_points_homogeneous.T
+        trianglulated_points = self.current_pose @ triangulated_points_homogeneous.T
         trianglulated_points = trianglulated_points[:3].T
         trianglulated_points = {'points': trianglulated_points, 'appearances': appearances_2D}
 
         self.update_state(w_T_c1, trianglulated_points)
+
+        number_of_world_points_2 = len(self.get_map()['points'])
+
+        number_of_points_in_meas_0_and_not_in_meas_1 = len(appearance) - len(matches_2D['points_1'])
+        number_of_points_in_meas_1_and_not_in_meas_0 = len(prev_appearance) - len(matches_2D['points_1'])
+        print('Number of points in measurement 0:', len(prev_appearance))
+        print('Number of points in measurement 1:', len(appearance))
+        print('Number of points in measurement 0 and not in measurement 1: ', number_of_points_in_meas_0_and_not_in_meas_1)
+        print('Number of points in measurement 1 and not in measurement 0: ', number_of_points_in_meas_1_and_not_in_meas_0)
+        print('Number of matches 2D: ', len(images_points_1_2D))
+
+        print('Number of world points triangulated post:', len(trianglulated_points['points']))
+        print('Number of world points in 1:', number_of_world_points_1)
+        print('Number of world points in 2:', number_of_world_points_2)
+        print('Number of world points added:', number_of_world_points_2 - number_of_world_points_1)
+        print()
 
 
     def error_and_jacobian(self, world_point, image_point):
