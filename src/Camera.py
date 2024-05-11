@@ -158,11 +158,14 @@ class Camera:
         local_camera_point_hom = np.linalg.inv(camera_pose) @ global_camera_point_hom
         local_camera_point = local_camera_point_hom[:3]
         print(local_camera_point)
-        
+
         #* point is behind the camera
-        [z_near, z_far] = self._camera_range    
+        # [z_near, z_far] = self._camera_range    
         # if local_camera_point[2] <= z_near or local_camera_point[2] >= z_far:
         #     return None, None
+
+        if local_camera_point[2] <= 0:
+            return None, None
         
         image_point_hom = self._camera_matrix @ local_camera_point
         image_point = image_point_hom[:2] / image_point_hom[2]
