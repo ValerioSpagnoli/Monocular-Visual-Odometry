@@ -1,5 +1,5 @@
 import numpy as np
-import quaternion
+import cv2
 import time
 
 
@@ -99,6 +99,24 @@ def v2T(v):
     T[:3,:3] = R
     T[:3,3] = v[:3].T
     return T
+
+def R2Euler(R):
+    """
+    Convert a rotation matrix into Euler angles.
+
+    Parameters:
+    R (numpy.ndarray): The rotation matrix of shape (3, 3).
+
+    Returns:
+    numpy.ndarray: The Euler angles in radians.
+    """
+
+    rotation_vector = cv2.Rodrigues(R)[0]
+    roll = rotation_vector[0]
+    pitch = rotation_vector[1]
+    yaw = rotation_vector[2]
+    return np.array([roll, pitch, yaw])
+
 
 
 def get_time(in_seconds=False):

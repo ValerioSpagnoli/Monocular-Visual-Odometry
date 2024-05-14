@@ -28,7 +28,7 @@ class VisualOdometry:
         self._damping_factor = damping_factor
         self._min_number_of_inliers = min_number_of_inliers
 
-    
+
     #* ###################################################################################################################### *#
     #* Protected methods
     
@@ -135,7 +135,6 @@ class VisualOdometry:
         points_normalized = np.dot(inv_cam_matrix, points_homogeneous.T).T
         return points_normalized[:, :2]
     
-
     def construct_matrix_A(self, points_0, points_1):
         """ Construct the matrix A used in the 8-point algorithm. """
         A = np.zeros((len(points_0), 9))
@@ -232,7 +231,7 @@ class VisualOdometry:
         matches = self.data_association(measurement_0, measurement_1)
         image_points_0 = np.array(matches['points_1'])
         image_points_1 = np.array(matches['points_2'])
-        appearances = np.array(matches['appearances'])
+        appearances    = np.array(matches['appearances'])
 
         #* Find the essential matrix
         K = self.camera.get_camera_matrix() 
@@ -240,11 +239,7 @@ class VisualOdometry:
         retval , R, t, mask = cv2.recoverPose(E, image_points_0, image_points_1, K, mask=mask)
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
-
-        image_points_0 = image_points_0[mask.ravel()==1]
-        image_points_1 = image_points_1[mask.ravel()==1]
-        appearances = appearances[mask.ravel()==1]
-
+ 
         #* Triangulate points
         triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0, image_points_1, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances}
@@ -262,9 +257,6 @@ class VisualOdometry:
         K = self.camera.get_camera_matrix()
         T_0 = self.current_pose
 
-        prev_appearance = prev_measurements['appearances']
-        appearance = measurements['appearances']
-
         matches_3D = self.data_association(measurements, map)
         image_points_3D = np.array(matches_3D['points_1'])
         world_points_3D = np.array(matches_3D['points_2'])
@@ -273,22 +265,25 @@ class VisualOdometry:
         matches_2D = self.data_association(prev_measurements, measurements)
         image_points_0_2D = np.array(matches_2D['points_1'])
         image_points_1_2D = np.array(matches_2D['points_2'])
-        appearances_2D = np.array(matches_2D['appearances'])
+        appearances_2D    = np.array(matches_2D['appearances'])
         
         #** Projective ICP (3D->2D)
-        # w_T_c0 = T_0
-        # T_1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, w_T_c0)
-        #T_1 = np.dot(w_T_c0, T_0_1)
-
+        T_0_1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, T_0)
+        
         #** 2D->2D
-        E, mask = cv2.findEssentialMat(image_points_0_2D, image_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        retval , R, t, mask = cv2.recoverPose(E, image_points_0_2D, image_points_1_2D, K, mask=mask)
-        T_0_1 = utils.Rt2T(R, -t)
-        T_1 = T_0 @ T_0_1
-
-        image_points_0_2D = image_points_0_2D[mask.ravel()==1]
-        image_points_1_2D = image_points_1_2D[mask.ravel()==1]
-        appearances_2D = appearances_2D[mask.ravel()==1]
+        # E, mask = cv2.findEssentialMat(image_points_0_2D, image_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        # retval , R, t, mask = cv2.recoverPose(E, image_points_0_2D, image_points_1_2D, K, mask=mask)
+        # T_0_1 = utils.Rt2T(R, -t)
+        # image_points_0_2D = image_points_0_2D[mask.ravel()==1]
+        # image_points_1_2D = image_points_1_2D[mask.ravel()==1]
+        # appearances_2D    = appearances_2D[mask.ravel()==1]
+        
+        T_1 = T_0 @ np.linalg.inv(T_0_1)
+        
+        print('T_0:\n', np.round(T_0, 2))
+        print('T_0_1:\n', np.round(T_0_1, 2))
+        print('T_1:\n', np.round(T_1, 2))
+        print('-----------------------------------------------\n\n')
 
         triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0_2D, image_points_1_2D, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances_2D}
@@ -352,7 +347,7 @@ class VisualOdometry:
         chi_stats = []
         num_inliers = []
 
-        MAX_ITER = 1
+        MAX_ITER = 10
         iteration = 0
         error = np.inf
         while (iteration < MAX_ITER) and (error > 1e-2):

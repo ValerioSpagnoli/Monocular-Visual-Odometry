@@ -156,7 +156,7 @@ class Camera:
     def project_point(self, global_camera_point, camera_pose):
         global_camera_point_hom = np.append(global_camera_point, 1)
         local_camera_point_hom = np.linalg.inv(camera_pose) @ global_camera_point_hom
-        local_camera_point = local_camera_point_hom[:3]
+        local_camera_point = local_camera_point_hom[:3]/local_camera_point_hom[3]
 
         #* point is behind the camera
         # [z_near, z_far] = self._camera_range    
@@ -171,7 +171,7 @@ class Camera:
 
         #* point is outside the camera's field of view
         if image_point[0] < 0 or image_point[0] >= self._camera_resolution[0] or image_point[1] < 0 or image_point[1] >= self._camera_resolution[1]:
-            return None, None
+            return image_point_hom, None
 
         return image_point_hom, image_point
 
