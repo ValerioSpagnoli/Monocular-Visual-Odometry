@@ -15,7 +15,7 @@ from scipy.optimize import least_squares
 from . import utils
 
 class VisualOdometry:
-    def __init__(self, camera, data, kernel_threshold=500, damping_factor=0.5, min_number_of_inliers=1):
+    def __init__(self, camera, data, kernel_threshold=1000, damping_factor=1, min_number_of_inliers=0):
         self.camera = camera
         self.data = data
         self.current_pose = np.eye(4)
@@ -250,7 +250,7 @@ class VisualOdometry:
 
 
 
-    def one_step(self, sequence_id):
+    def update(self, sequence_id):
         prev_measurements = self.data.get_measurement_points(sequence_id - 1)
         measurements = self.data.get_measurement_points(sequence_id)
         map = self.get_map()
@@ -266,17 +266,7 @@ class VisualOdometry:
         image_points_0_2D = np.array(matches_2D['points_1'])
         image_points_1_2D = np.array(matches_2D['points_2'])
         appearances_2D    = np.array(matches_2D['appearances'])
-        
-        #** Projective ICP (3D->2D)
-        H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(image_points_3D, world_points_3D)
-        H += np.eye(6) * self._damping_factor
-        if num_inliers < self._min_number_of_inliers: return
-        dx = np.linalg.solve(H, -b)
-        w_T_c0 = T_0
-        c1_T_c0 = utils.v2T(dx)
-        w_T_c1 = np.linalg.inv(c1_T_c0 @ np.linalg.inv(w_T_c0))
-        T_1 = w_T_c1
-        
+
         #** 2D->2D
         # E, mask = cv2.findEssentialMat(image_points_0_2D, image_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
         # retval , R, t, mask = cv2.recoverPose(E, image_points_0_2D, image_points_1_2D, K, mask=mask)
@@ -284,13 +274,37 @@ class VisualOdometry:
         # image_points_0_2D = image_points_0_2D[mask.ravel()==1]
         # image_points_1_2D = image_points_1_2D[mask.ravel()==1]
         # appearances_2D    = appearances_2D[mask.ravel()==1]
-                
+
+        #** Projective ICP (3D->2D)
+        T_1 = self.solve_picp(image_points_3D, world_points_3D)
+
         triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0_2D, image_points_1_2D, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances_2D}
 
         self.update_state(T_1, triangulated_points)
 
 
+    def solve_picp(self, image_points, world_points):
+        T_0 = self.current_pose 
+        T_1 = self.current_pose 
+        for i in range(2):
+            T_1 = self.one_round(image_points, world_points, T_0)
+            if T_1 is None: return T_0
+            T_0 = T_1
+        
+        return T_1
+
+    def one_round(self, image_points, world_points, w_T_c0):        
+        H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(image_points, world_points)
+        H += np.eye(6) * self._damping_factor
+        if num_inliers < self._min_number_of_inliers: return
+        
+        dx = np.linalg.solve(H, -b)
+        c1_T_c0 = utils.v2T(dx)
+        w_T_c1 = np.linalg.inv(c1_T_c0 @ np.linalg.inv(w_T_c0))
+
+        return w_T_c1
+    
     def error_and_jacobian(self, world_point, image_point):
         """
         Compute the error and Jacobian of the transformation between a world point and its corresponding image point.
@@ -309,17 +323,14 @@ class VisualOdometry:
 
         K = self.camera.get_camera_matrix()
 
-        #* Compute the prediction
-
-        
+        #** Compute the prediction
         #* proj_image_point_hom = K @ T @ p_w 
         #* proj_image_point = proj(K @ T @ p_w) = proj_image_point_hom[:2] / proj_image_point_hom[2]
         proj_image_point_hom, proj_image_point = self.camera.project_point(world_point, self.current_pose)
         if proj_image_point is None or proj_image_point_hom is None: 
             return None, None
         
-
-        #* Compute the error
+        #** Compute the error
         error = proj_image_point - image_point
 
         #* p_hat_hom        = T @ p_w                      (with homogenization)
