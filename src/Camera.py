@@ -154,8 +154,7 @@ class Camera:
     
 
     def project_point(self, global_camera_point, camera_pose):
-        global_camera_point_hom = np.append(global_camera_point, 1)
-        local_camera_point_hom = np.linalg.inv(camera_pose) @ global_camera_point_hom
+        local_camera_point_hom = np.linalg.inv(camera_pose) @ np.append(global_camera_point, 1)
         local_camera_point = local_camera_point_hom[:3]/local_camera_point_hom[3]
 
         #* point is behind the camera

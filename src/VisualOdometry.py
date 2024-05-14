@@ -15,7 +15,7 @@ from scipy.optimize import least_squares
 from . import utils
 
 class VisualOdometry:
-    def __init__(self, camera, data, kernel_threshold=1000, damping_factor=1, min_number_of_inliers=0):
+    def __init__(self, camera, data, kernel_threshold=500, damping_factor=0.5, min_number_of_inliers=1):
         self.camera = camera
         self.data = data
         self.current_pose = np.eye(4)
@@ -268,7 +268,14 @@ class VisualOdometry:
         appearances_2D    = np.array(matches_2D['appearances'])
         
         #** Projective ICP (3D->2D)
-        T_0_1, chi_stats, num_inliers = self.linearize(image_points_3D, world_points_3D, T_0)
+        H, b, num_inliers, chi_inliers, chi_outliers = self.linearize(image_points_3D, world_points_3D)
+        H += np.eye(6) * self._damping_factor
+        if num_inliers < self._min_number_of_inliers: return
+        dx = np.linalg.solve(H, -b)
+        w_T_c0 = T_0
+        c1_T_c0 = utils.v2T(dx)
+        w_T_c1 = np.linalg.inv(c1_T_c0 @ np.linalg.inv(w_T_c0))
+        T_1 = w_T_c1
         
         #** 2D->2D
         # E, mask = cv2.findEssentialMat(image_points_0_2D, image_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
@@ -277,14 +284,7 @@ class VisualOdometry:
         # image_points_0_2D = image_points_0_2D[mask.ravel()==1]
         # image_points_1_2D = image_points_1_2D[mask.ravel()==1]
         # appearances_2D    = appearances_2D[mask.ravel()==1]
-        
-        T_1 = T_0 @ np.linalg.inv(T_0_1)
-        
-        print('T_0:\n', np.round(T_0, 2))
-        print('T_0_1:\n', np.round(T_0_1, 2))
-        print('T_1:\n', np.round(T_1, 2))
-        print('-----------------------------------------------\n\n')
-
+                
         triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0_2D, image_points_1_2D, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances_2D}
 
@@ -310,25 +310,36 @@ class VisualOdometry:
         K = self.camera.get_camera_matrix()
 
         #* Compute the prediction
+
+        
+        #* proj_image_point_hom = K @ T @ p_w 
+        #* proj_image_point = proj(K @ T @ p_w) = proj_image_point_hom[:2] / proj_image_point_hom[2]
         proj_image_point_hom, proj_image_point = self.camera.project_point(world_point, self.current_pose)
-        if proj_image_point_hom is None or proj_image_point is None:
-            logger.warning('Point is behind the camera.')
+        if proj_image_point is None or proj_image_point_hom is None: 
             return None, None
+        
 
         #* Compute the error
         error = proj_image_point - image_point
 
+        #* p_hat_hom        = T @ p_w                      (with homogenization)
+        #* p_hat            = p_hat_hom[:3]/p_hat_hom[3]   (without homogenization)
+        #* p_hat_cam        = K @ p_hat                    (without homogenization)
+        p_hat_hom = np.linalg.inv(self.current_pose) @ np.append(world_point, 1) 
+        p_hat     = p_hat_hom[:3]/p_hat_hom[3] 
+        p_hat_cam = self.camera.get_camera_matrix() @ p_hat
+        
         #* Compute the Jacobian of the transformation
         J_icp = np.zeros((3, 6))
         J_icp[:3, :3] = np.eye(3)
-        J_icp[:3, 3:] = utils.skew(-np.floor(world_point))
+        J_icp[:3, 3:] = utils.skew(-p_hat)
 
         #* Compute the Jacobian of the projection
-        z_inv = 1.0 / proj_image_point_hom[2]
+        z_inv = 1.0 / p_hat_cam[2]
         z_inv_square = z_inv * z_inv
 
-        J_proj = np.array([ [z_inv, 0, -proj_image_point_hom[0]*z_inv_square],
-                            [0, z_inv, -proj_image_point_hom[1]*z_inv_square] ])
+        J_proj = np.array([ [z_inv, 0, -p_hat_cam[0]*z_inv_square],
+                            [0, z_inv, -p_hat_cam[1]*z_inv_square] ])
         
         #* Compute the Jacobian
         jacobian = J_proj @ K @ J_icp
@@ -338,58 +349,44 @@ class VisualOdometry:
         return error, jacobian
     
     
-    def linearize(self, image_points, world_points, T):
+    def linearize(self, image_points, world_points):
         
         logger.info('Linearizing')
         start = utils.get_time()
-
-        T_0 = T
-        chi_stats = []
-        num_inliers = []
-
-        MAX_ITER = 10
-        iteration = 0
-        error = np.inf
-        while (iteration < MAX_ITER) and (error > 1e-2):
         
-            H = np.zeros((6, 6))
-            b = np.zeros(6)
+        H = np.zeros((6, 6))
+        b = np.zeros(6)
+        
+        num_inliers = 0
+        chi_inliers = 0
+        chi_outliers = 0
+
+        for i in range(len(world_points)):
+            world_point = world_points[i]
+            image_point = image_points[i]
+
+            e, J = self.error_and_jacobian(world_point, image_point)
+            if e is None or J is None: continue
             
-            num_inliers_ = 0
-            chi_stats_ = 0
+            chi = np.dot(e.T, e)    
+            lambda_ = 1.0
+            is_inlier = True
+            if chi > self._kernel_threshold:
+                lambda_ = np.sqrt(self._kernel_threshold / chi)
+                is_inlier = False
+                chi_outliers += chi
+            else:
+                num_inliers += 1
+                chi_inliers += chi
 
-            for i in range(len(world_points)):
-                world_point = world_points[i]
-                image_point = image_points[i]
 
-                e, J = self.error_and_jacobian(world_point, image_point)
-                if e is None or J is None: continue
-                error = np.linalg.norm(e)
-
-                chi = np.dot(e.T, e)    
-                if chi > self._kernel_threshold:
-                    e *= np.sqrt(self._kernel_threshold / chi)
-                    chi = self._kernel_threshold
-                else:
-                    num_inliers_ += 1
-
-                chi_stats_ += chi
-                H += np.dot(J.T, J)
-                b += np.dot(J.T, e)
-
-            chi_stats.append(chi_stats_)
-            num_inliers.append(num_inliers_)
-
-            if num_inliers_ >= self._min_number_of_inliers:
-                H += self._damping_factor * np.eye(6)
-                dx = np.linalg.lstsq(H, -b, rcond=None)[0]
-                T = utils.v2T(dx) * T_0
-
-            iteration += 1
+            if is_inlier:
+                H += J.T @ J *lambda_
+                b += J.T @ e *lambda_
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Linearization done.')
 
-        return T, chi_stats, num_inliers
+        return H, b, num_inliers, chi_inliers, chi_outliers
 
 
     def update_state(self, T, world_points):
