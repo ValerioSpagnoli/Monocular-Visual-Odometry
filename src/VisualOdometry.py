@@ -20,7 +20,7 @@ class VisualOdometry:
         self.data = data
         self.current_pose = np.eye(4)
         self.initial_pose = np.eye(4)
-        self.current_to_initial_transform = np.eye(4)
+
         self.map = {'points':[], 'appearances':[]}
         self.trajectory = {'poses':[], 'world_points':[]}
 
@@ -57,9 +57,6 @@ class VisualOdometry:
                 continue
             self.map['points'].append(position)
             self.map['appearances'].append(appearance)
-
-        print('Number of world points NOT added:', counter)
-
 
     def _add_to_trajectory(self, T, world_points):
         """
@@ -199,8 +196,6 @@ class VisualOdometry:
         points_homogeneous = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
         points = (points_homogeneous[:3] / points_homogeneous[3]).T 
 
-        print('Number of world points triangulated pre:', len(points))
-
         triangulated_points_local = []
         triangulated_points_hom_local = []
         for point in points:
@@ -249,20 +244,11 @@ class VisualOdometry:
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
-        self.current_to_initial_transform = np.linalg.inv(T_1)
-
         #* Triangulate points
         triangulated_points_local, triangulated_points_global = self.triangulate_points(set_0, set_1, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances}
         
         self.update_state(T_1, triangulated_points)
-
-        print('Number of points in measurement 0:', len(points_0['appearances']))
-        print('Number of points in measurement 1:', len(points_1['appearances']))
-        print('Number of points in measurement 0 and not in measurement 1: ', len(points_0['appearances']) - len(set_0))
-        print('Number of points in measurement 1 and not in measurement 0: ', len(points_1['appearances']) - len(set_0))
-        print('Number of matches:', len(set_0))
-        print('Number of world points triangulated post:', len(triangulated_points['points']))
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Visual odometry initialized.')
 
@@ -310,17 +296,6 @@ class VisualOdometry:
 
         number_of_points_in_meas_0_and_not_in_meas_1 = len(appearance) - len(matches_2D['points_1'])
         number_of_points_in_meas_1_and_not_in_meas_0 = len(prev_appearance) - len(matches_2D['points_1'])
-        print('Number of points in measurement 0:', len(prev_appearance))
-        print('Number of points in measurement 1:', len(appearance))
-        print('Number of points in measurement 0 and not in measurement 1: ', number_of_points_in_meas_0_and_not_in_meas_1)
-        print('Number of points in measurement 1 and not in measurement 0: ', number_of_points_in_meas_1_and_not_in_meas_0)
-        print('Number of matches 2D: ', len(images_points_1_2D))
-
-        print('Number of world points triangulated post:', len(triangulated_points['points']))
-        print('Number of world points in 1:', number_of_world_points_1)
-        print('Number of world points in 2:', number_of_world_points_2)
-        print('Number of world points added:', number_of_world_points_2 - number_of_world_points_1)
-        print()
 
 
     def error_and_jacobian(self, world_point, image_point):
@@ -364,15 +339,6 @@ class VisualOdometry:
         
         #* Compute the Jacobian
         jacobian = J_proj @ K @ J_icp
-        print('image_point', np.round(image_point, 2))
-        print('proj_image_point', np.round(proj_image_point, 2))
-        print('proj_image_point_hom', np.round(proj_image_point_hom, 2))
-        print('error', np.round(error, 2))
-        print('z_inv_square', np.round(z_inv_square, 2))
-        print('J_icp\n', np.round(J_icp, 2))
-        print('J_proj\n', np.round(J_proj, 2)) 
-        print('J\n', np.round(jacobian, 2))
-        print('==============================================================\n\n')
 
         logger.info(f'{(utils.get_time() - start):.2f} [ms] - Error and Jacobian computed.')
 
@@ -404,11 +370,7 @@ class VisualOdometry:
                 image_point = image_points[i]
 
                 e, J = self.error_and_jacobian(world_point, image_point)
-                print('##############################################################')
                 if e is None or J is None: continue
-                print('e' , np.round(e, 2))
-                print('J' , np.round(J, 2))
-                print('==============================================================\n\n')
                 error = np.linalg.norm(e)
 
                 chi = np.dot(e.T, e)    

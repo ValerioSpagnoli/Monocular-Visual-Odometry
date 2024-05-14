@@ -157,7 +157,6 @@ class Camera:
         global_camera_point_hom = np.append(global_camera_point, 1)
         local_camera_point_hom = np.linalg.inv(camera_pose) @ global_camera_point_hom
         local_camera_point = local_camera_point_hom[:3]
-        print(local_camera_point)
 
         #* point is behind the camera
         # [z_near, z_far] = self._camera_range    
