@@ -48,13 +48,10 @@ class VisualOdometry:
         positions = world_points['points']
         appearances = world_points['appearances']
 
-        counter = 0
         for i in range(len(positions)):
             position = positions[i]
             appearance = appearances[i]
-            if appearance in self.map['appearances']: 
-                counter += 1
-                continue
+            if np.any([np.equal(appearance, a).all() for a in self.map['appearances']]): continue
             self.map['points'].append(position)
             self.map['appearances'].append(appearance)
 
@@ -228,24 +225,24 @@ class VisualOdometry:
         self.initial_pose = T_0
 
         #* Image points in frame 0 and frame 1
-        points_0 = self.data.get_measurement_points(0)
-        points_1 = self.data.get_measurement_points(1)
+        measurement_0 = self.data.get_measurement_points(0)
+        measurement_1 = self.data.get_measurement_points(1)
 
         #* Data association between the points in frame 0 and frame 1
-        matches = self.data_association(points_0, points_1)
-        set_0 = np.array(matches['points_1'])
-        set_1 = np.array(matches['points_2'])
-        appearances = matches['appearances']
+        matches = self.data_association(measurement_0, measurement_1)
+        image_points_0 = np.array(matches['points_1'])
+        image_points_1 = np.array(matches['points_2'])
+        appearances = np.array(matches['appearances'])
 
         #* Find the essential matrix
         K = self.camera.get_camera_matrix() 
-        E, mask = cv2.findEssentialMat(set_0, set_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        retval , R, t, mask = cv2.recoverPose(E, set_0, set_1, K)
+        E, mask = cv2.findEssentialMat(image_points_0, image_points_1, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, image_points_0, image_points_1, K, mask=mask)
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
         #* Triangulate points
-        triangulated_points_local, triangulated_points_global = self.triangulate_points(set_0, set_1, T_0, T_1)
+        triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0, image_points_1, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances}
         
         self.update_state(T_1, triangulated_points)
@@ -270,8 +267,8 @@ class VisualOdometry:
         appearances_3D = matches_3D['appearances']
 
         matches_2D = self.data_association(prev_measurements, measurements)
-        images_points_1_2D = np.array(matches_2D['points_1'])
-        images_points_2_2D = np.array(matches_2D['points_2'])
+        images_points_0_2D = np.array(matches_2D['points_1'])
+        images_points_1_2D = np.array(matches_2D['points_2'])
         appearances_2D = matches_2D['appearances']
         
         #** Projective ICP (3D->2D)
@@ -280,14 +277,14 @@ class VisualOdometry:
         #T_1 = np.dot(w_T_c0, T_0_1)
 
         #** 2D->2D
-        E, mask = cv2.findEssentialMat(images_points_1_2D, images_points_2_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        retval , R, t, mask = cv2.recoverPose(E, images_points_1_2D, images_points_2_2D, K)
+        E, mask = cv2.findEssentialMat(images_points_0_2D, images_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, images_points_0_2D, images_points_1_2D, K)
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
         number_of_world_points_1 = len(self.get_map()['points'])    
 
-        triangulated_points_local, triangulated_points_global = self.triangulate_points(images_points_1_2D, images_points_2_2D, T_0, T_1)
+        triangulated_points_local, triangulated_points_global = self.triangulate_points(images_points_0_2D, images_points_1_2D, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances_2D}
 
         self.update_state(T_1, triangulated_points)
