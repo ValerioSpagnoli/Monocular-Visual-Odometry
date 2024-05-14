@@ -241,6 +241,10 @@ class VisualOdometry:
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
+        image_points_0 = image_points_0[mask.ravel()==1]
+        image_points_1 = image_points_1[mask.ravel()==1]
+        appearances = appearances[mask.ravel()==1]
+
         #* Triangulate points
         triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0, image_points_1, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances}
@@ -267,9 +271,9 @@ class VisualOdometry:
         appearances_3D = matches_3D['appearances']
 
         matches_2D = self.data_association(prev_measurements, measurements)
-        images_points_0_2D = np.array(matches_2D['points_1'])
-        images_points_1_2D = np.array(matches_2D['points_2'])
-        appearances_2D = matches_2D['appearances']
+        image_points_0_2D = np.array(matches_2D['points_1'])
+        image_points_1_2D = np.array(matches_2D['points_2'])
+        appearances_2D = np.array(matches_2D['appearances'])
         
         #** Projective ICP (3D->2D)
         # w_T_c0 = T_0
@@ -277,22 +281,19 @@ class VisualOdometry:
         #T_1 = np.dot(w_T_c0, T_0_1)
 
         #** 2D->2D
-        E, mask = cv2.findEssentialMat(images_points_0_2D, images_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
-        retval , R, t, mask = cv2.recoverPose(E, images_points_0_2D, images_points_1_2D, K)
+        E, mask = cv2.findEssentialMat(image_points_0_2D, image_points_1_2D, K, method=cv2.RANSAC, prob=0.999, threshold=0.1)
+        retval , R, t, mask = cv2.recoverPose(E, image_points_0_2D, image_points_1_2D, K, mask=mask)
         T_0_1 = utils.Rt2T(R, -t)
         T_1 = T_0 @ T_0_1
 
-        number_of_world_points_1 = len(self.get_map()['points'])    
+        image_points_0_2D = image_points_0_2D[mask.ravel()==1]
+        image_points_1_2D = image_points_1_2D[mask.ravel()==1]
+        appearances_2D = appearances_2D[mask.ravel()==1]
 
-        triangulated_points_local, triangulated_points_global = self.triangulate_points(images_points_0_2D, images_points_1_2D, T_0, T_1)
+        triangulated_points_local, triangulated_points_global = self.triangulate_points(image_points_0_2D, image_points_1_2D, T_0, T_1)
         triangulated_points = {'points': triangulated_points_global, 'appearances': appearances_2D}
 
         self.update_state(T_1, triangulated_points)
-
-        number_of_world_points_2 = len(self.get_map()['points'])
-
-        number_of_points_in_meas_0_and_not_in_meas_1 = len(appearance) - len(matches_2D['points_1'])
-        number_of_points_in_meas_1_and_not_in_meas_0 = len(prev_appearance) - len(matches_2D['points_1'])
 
 
     def error_and_jacobian(self, world_point, image_point):
