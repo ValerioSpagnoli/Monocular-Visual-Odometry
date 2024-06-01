@@ -1,190 +1,148 @@
-import logging
-logger = logging.getLogger()
-logger.setLevel(logging.INFO)
-
-handler = logging.StreamHandler()
-formatter = logging.Formatter('%(levelname)s - %(message)s')
-handler.setFormatter(formatter)
-
-logger.handlers.clear()
-logger.addHandler(handler)
-
 import numpy as np
-from . import utils
-
 
 class Camera:
-    def __init__(self, camera_parameters_file):
+    def __init__(self):
+        self.__camera_matrix, self.__camera_transform, self.__camera_range, self.__camera_resolution = self.__load_camera_data()
+        
+        self.__c_T_w = np.eye(4) # world in camera pose
 
-        self.__camera_parameters_file = camera_parameters_file
-        self._camera_matrix, self._intrinsic_matrix, self._camera_transform, self._extrinsic_matrix, self._camera_range, self._camera_resolution = self.__load_camera_parameters()
-        self._world_in_camera_pose = np.linalg.inv(self._camera_transform)
-
-    def __load_camera_parameters(self):
-        logger.info(f'Loading camera parameters from {self.__camera_parameters_file}')
-        start = utils.get_time()
-
-        camera_matrix = np.zeros((3, 3), dtype=float)   
-        intrinsic_matrix = np.zeros((3, 4), dtype=float)
-        camera_transform = np.zeros((4, 4), dtype=float)
-        extrinsic_matrix = np.zeros((4, 4), dtype=float)
-        camera_range = np.zeros(2, dtype=float)
-        camera_resolution = np.zeros(2, dtype=int)
+        
+    def __load_camera_data(self):
+        camera_matrix = []
+        camera_transform = []
+        camera_range = []
+        camera_resolution = []
 
         try:
-            with open(self.__camera_parameters_file, 'r') as file:
-                data = file.readlines()
-        except FileNotFoundError:
-            assert False, f'Camera parameters file not found at {self.__camera_parameters_file}'
+            file = open("data/camera.dat", "r")
+            lines = file.readlines()
 
-        for line in data:
-            if line.startswith('camera matrix:'):
-                for i in range(3):
-                    values = data[data.index(line) + i + 1].split()
-                    camera_matrix[i] = [float(value) for value in values]
-                intrinsic_matrix[:3, :3] = camera_matrix
+            for i in range(len(lines)):
+                line = lines[i]
+                if line.startswith('camera matrix'): 
+                    for j in range(1,4):
+                        line = lines[i+j]
+                        tokens = [int(x) for x in line.split()]
+                        camera_matrix.append(tokens)
+            
+                elif line.startswith('cam_transform'):
+                    for j in range(1,5):
+                        line = lines[i+j]
+                        tokens = [float(x) for x in line.split()]
+                        camera_transform.append(tokens)
+                
+                elif line.startswith('z_near'):
+                    tokens = line.split()
+                    z_near = float(tokens[1])
+                    camera_range.append(z_near)
+                
+                elif line.startswith('z_far'):
+                    tokens = line.split()
+                    z_far = float(tokens[1])
+                    camera_range.append(z_far)
 
-            elif line.startswith('cam_transform:'):
-                camera_transform = np.zeros((4, 4))
-                for i in range(4):
-                    values = data[data.index(line) + i + 1].split()
-                    camera_transform[i] = [float(value) for value in values]
+                elif line.startswith('width'):
+                    tokens = line.split()
+                    width = int(tokens[1])
+                    camera_resolution.append(width)
 
-                extrinsic_matrix[:3, :3] = np.array(camera_transform[:3, :3]).T
-                extrinsic_matrix[:3, 3] = -np.dot(np.array(camera_transform[:3, :3]).T, np.array(camera_transform[:3, 3]))
-                extrinsic_matrix[3, 3] = 1
+                elif line.startswith('height'):
+                    tokens = line.split()
+                    height = int(tokens[1])
+                    camera_resolution.append(height)
 
-            elif line.startswith('z_near'):
-                camera_range[0] = float(line.split()[1])
-            elif line.startswith('z_far'):
-                camera_range[1] = float(line.split()[1])
+        except: print("Error: Could not find the camera.dat file")
 
-            elif line.startswith('width'):
-                camera_resolution[0] = int(line.split()[1])
-            elif line.startswith('height'):
-                camera_resolution[1] = int(line.split()[1])
-
-        logger.info(f'{(utils.get_time() - start):.2f} [ms] - Camera parameters loaded successfully.')
-        return camera_matrix, intrinsic_matrix, camera_transform, extrinsic_matrix, camera_range, camera_resolution
-
-
-    #* GETTERS
-    #* ------------------------------------------------------------------------------------- #
-
+        camera_matrix = np.array(camera_matrix)
+        camera_transform = np.array(camera_transform)
+        
+        return camera_matrix, camera_transform, camera_range, camera_resolution
+    
     def get_camera_matrix(self):
-            
-        '''
-        Returns the camera matrix of the camera:
-
-        [ fx  0 cx ]\\
-        [  0 fy cy ]\\
-        [  0  0  1 ]
-
-        where: 
-        - fx, fy: focal lengths in x and y directions
-        - cx, cy: principal point coordinates
-        '''
-
-        return self._camera_matrix
-
-    def get_intrinsic_matrix(self):
-        
-        '''
-        Returns the intrinsic matrix of the camera:
-
-        [ fx  0 cx 0 ]\\
-        [  0 fy cy 0 ]\\
-        [  0  0  1 0 ]
-
-        where: 
-        - fx, fy: focal lengths in x and y directions
-        - cx, cy: principal point coordinates
-        '''
-
-        return self._intrinsic_matrix
+        return self.__camera_matrix 
     
-
+    def get_intrinsic_camera_matrix(self):
+        intrinsic_camera_matrix = np.zeros((3,4))
+        intrinsic_camera_matrix[:3,:3] = self.__camera_matrix
+        return intrinsic_camera_matrix
+        
     def get_camera_transform(self):
-            
-        '''
-        Returns the camera transform of the camera:
-
-        [ R | t ]\\
-        [ 0 | 1 ]
-
-        where:
-        - R: rotation matrix (3x3)
-        - t: translation vector (3x1)
-        '''
-
-        return self._camera_transform
-
-    def get_extrinsic_matrix(self):
-        
-        '''
-        Returns the extrinsic matrix (camera transform) of the camera:
-            
-        [ R | -R*t ]\\
-        [ 0 |    1 ]
+        return self.__camera_transform
     
-        where:
-        - R: rotation matrix (3x3)
-        - t: translation vector (3x1)
-        '''
-
-        return self._extrinsic_matrix
-
-
     def get_camera_range(self):
-
-        '''
-        Returns the camera range [z_near, z_far], i.e. how close/far the camera can perceive objects
-        '''
-
-        return self._camera_range
-
-
-    def get_camera_resolution(self):
-
-        '''
-        Returns the camera resolution [width, height]
-        '''
-
-        return self._camera_resolution
+        return self.__camera_range
     
+    def get_camera_resolution(self):
+        return self.__camera_resolution
+    
+    def set_c_T_w(self, c_T_w):
+        self.__c_T_w = c_T_w
 
-    def project_point(self, global_camera_point, camera_pose):
-        local_camera_point_hom = np.linalg.inv(camera_pose) @ np.append(global_camera_point, 1)
-        local_camera_point = local_camera_point_hom[:3]/local_camera_point_hom[3]
+    def get_c_T_w(self):
+        return self.__c_T_w
+    
+    def project_point(self, world_point):
+        #* c_T_w:        world in camera pose 
+        #* world_point:  3D point in initial camera coordinates (i.e. the camera coordinates of the first frame)
+        #* camera_point: 3D point in current camera coordinates
+        #* image_point:  2D point in image coordinates
 
-        #* point is behind the camera
-        # [z_near, z_far] = self._camera_range    
-        # if local_camera_point[2] <= z_near or local_camera_point[2] >= z_far:
-        #     return None, None
+        #* Projection: camera_point = c_T_w * world_point
+        #*             image_point  = camera_matrix * camera_point
 
-        if local_camera_point[2] <= 0:
-            return None, None
-        
-        image_point_hom = self._camera_matrix @ local_camera_point
+        camera_point_hom = self.__c_T_w @ np.append(world_point, 1)
+        camera_point = camera_point_hom[:3] / camera_point_hom[3]
+
+        image_point_hom = self.__camera_matrix @ camera_point   
         image_point = image_point_hom[:2] / image_point_hom[2]
 
-        #* point is outside the camera's field of view
-        if image_point[0] < 0 or image_point[0] >= self._camera_resolution[0] or image_point[1] < 0 or image_point[1] >= self._camera_resolution[1]:
-            return image_point_hom, None
+        #* point is behind the camera
+        if camera_point[2] <= 0: return False, None
 
-        return image_point_hom, image_point
+        #* point is outside the camera range
+        # if camera_point[2] <= self.__camera_range[0] or camera_point[2] >= self.__camera_range[1]: return False, None
 
+        #* point is outside the camera plane
+        if image_point[0] < 0 or image_point[0] >= self.__camera_resolution[0] or \
+           image_point[1] < 0 or image_point[1] >= self.__camera_resolution[1]: 
+            return False, None
 
-    def pixel_to_world_projection(self, image_point, depth, pose):
-        
-        t = self._camera_transform[:3, 3]
-        R = self._camera_transform[:3, :3]
-        robot_t = pose[:3, 3]
-        robot_R = pose[:3, :3]
-        
-        image_point_hom = np.array([image_point[0], image_point[1], 1])
-        camera_point = depth * np.dot(np.linalg.inv(self._camera_matrix), image_point_hom)
-        world_point = t + np.dot(R, camera_point)
-        estimated_world_point = robot_t + np.dot(robot_R, world_point)
-        return estimated_world_point
+        return True, image_point
     
+    def project_points(self, world_points):
+        image_points = []
+        for world_point in world_points:
+            is_inside, image_point = self.project_point(world_point)
+            if is_inside: image_points.append(image_point)
+        return image_points
+    
+    def project_world_point(self, world_point, pose):
+        #* c_T_w:        world in camera pose 
+        #* world_point:  3D point in world coordinates 
+        #* world_point_in_camera_frame: 3D point in world coordinates but in current camera frame pose
+        #* camera_point: 3D point in current camera coordinates
+        #* image_point:  2D point in image coordinates
+
+        #* Projection: camera_point = c_T_w * world_point
+        #*             image_point  = camera_matrix * camera_point
+
+        world_point_hom = np.append(world_point, 1)
+        world_point_in_camera_frame = np.linalg.inv(pose) @ world_point_hom
+        camera_point_hom = np.linalg.inv(self.get_camera_transform()) @ world_point_in_camera_frame
+        camera_point = camera_point_hom[:3] / camera_point_hom[3]
+        
+        image_point_hom = self.get_camera_matrix() @ camera_point   
+        image_point = image_point_hom[:2] / image_point_hom[2]
+
+        #* point is behind the camera
+        #if camera_point[2] <= 0: return False, None
+
+        #* point is outside the camera range
+        if camera_point[2] <= self.get_camera_range()[0] or camera_point[2] >= self.get_camera_range()[1]: return False, None
+
+        #* point is outside the camera plane
+        if image_point[0] < 0 or image_point[0] >= self.get_camera_resolution()[0] or \
+            image_point[1] < 0 or image_point[1] >= self.get_camera_resolution()[1]: 
+            return False, None
+
+        return True, image_point
