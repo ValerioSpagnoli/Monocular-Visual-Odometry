@@ -24,7 +24,7 @@ class Data:
         return trajectory
 
     def __load_world_data(self):
-        world_map = {'id': [], 'position': [], 'appearance': []}
+        world_map = {'position': [], 'appearance': []}
         
         try:
             file = open("data/world.dat", "r")
@@ -35,7 +35,6 @@ class Data:
                 id = int(tokens[0])
                 position = [float(x) for x in tokens[1:4]]
                 appearance = [float(x) for x in tokens[4:]]
-                world_map['id'].append(id)
                 world_map['position'].append(position)
                 world_map['appearance'].append(appearance)
                 

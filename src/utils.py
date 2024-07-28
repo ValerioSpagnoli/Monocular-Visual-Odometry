@@ -17,8 +17,7 @@ def Rz(theta):
                      [0,              0,             1]])
 
 def euler2R(euler):
-    R = Rx(euler[0]) @ Ry(euler[1]) @ Rz(euler[2])
-    return R
+    return cv2.Rodrigues(euler)[0]
 
 def R2euler(R):
     rotation_vector = cv2.Rodrigues(R)[0]
@@ -30,7 +29,7 @@ def R2euler(R):
 def v2T(v):
     translation = np.array(v[:3])
     rotation_euler = np.array(v[3:])
-    R = euler2R(rotation_euler)
+    R = euler2R(rotation_euler.astype(np.float32))
     T = np.eye(4)
     T[:3,:3] = R
     T[:3,3] = translation.T

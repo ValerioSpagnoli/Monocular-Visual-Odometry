@@ -7,7 +7,7 @@ import numpy as np
 import cv2
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=np.inf, dumping_factor=20, min_inliners=1, num_iterations=20):
+    def __init__(self, kernel_threshold=10000, dumping_factor=1, min_inliners=8, num_iterations=30):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -34,16 +34,23 @@ class VisualOdometry:
 
         #** Current pose of the camera in global coordinates
         self.__current_pose = np.eye(4)
- 
+
     
-    def triangulate_points(self, points_0, points_1, T_0, T_1):
-        
-        #** Projection matrix
-        P_0 = self.__camera.get_intrinsic_camera_matrix() @ np.linalg.inv(T_0)
-        P_1 = self.__camera.get_intrinsic_camera_matrix() @ np.linalg.inv(T_1)
+    def triangulate_points(self, points_0, points_1, w_T_c0, w_T_c1):
+
+        K = self.__camera.get_camera_matrix()
+
+        T = np.linalg.inv(w_T_c1) @ w_T_c0
+        R = T[:3, :3] 
+        t = T[:3, 3].reshape(-1, 1)   
+
+        #** Projection matrices
+        P_0 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+        P_1 = K @ np.hstack((R, t))        
 
         #** Triangulate points
         points_4D = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
+        points_4D = w_T_c0 @ points_4D
         points_3D = points_4D[:3] / points_4D[3]
 
         return points_3D.T
@@ -81,6 +88,7 @@ class VisualOdometry:
 
         #** Projective ICP 
         w_T_c1 = self.projective_ICP(next_measurement)
+        print(f'Frame: {index}, w_T_c1: {np.round(w_T_c1, 2)}')
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -113,21 +121,21 @@ class VisualOdometry:
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0):
 
-        if (len(current_world_points) == 0): return w_T_c0
+        if (len(current_world_points) == 0): return w_T_c0, True
 
         H, b, num_inliers, chi_inliers, chi_outliers, error = self.linearize(reference_image_points, current_world_points)
         if num_inliers < self.__min_inliners: return None, None
 
         H += np.eye(6) * self.__dumping_factor
         dx = np.linalg.solve(H, -b)
-        
-        print(f'total_error: {error}, dx: {np.linalg.norm(dx)}')   
+        print(np.round(dx, 2))
+        # print(f'total_error: {error}, dx: {np.linalg.norm(dx)}')   
 
         initial_guess = T2v(w_T_c0)
         updated_guess = initial_guess + dx
         w_T_c1 = v2T(updated_guess)
 
-        return w_T_c1, error<1 or np.linalg.norm(dx)<1e-5
+        return w_T_c1, error<0.1 or np.linalg.norm(dx)<1e-5
 
     def linearize(self, reference_image_points, currrent_world_points):
         H = np.zeros((6, 6))
