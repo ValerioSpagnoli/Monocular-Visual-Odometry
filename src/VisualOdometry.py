@@ -5,9 +5,11 @@ from src.utils import *
 
 import numpy as np
 import cv2
+import os
+import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=10000, dumping_factor=1, min_inliners=8, num_iterations=30):
+    def __init__(self, kernel_threshold=300, dumping_factor=2, min_inliners=2, num_iterations=100):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -83,12 +85,15 @@ class VisualOdometry:
         self.__update_state(w_T_1, map)
 
     def update(self, index):
+        if os.path.exists(f'outputs/frame_{index}'): os.system(f'rm -r outputs/frame_{index}')
+        os.makedirs(f'outputs/frame_{index}', exist_ok=True)
+
         current_measurement = self.__data.get_measurements_data_points(index)
         next_measurement = self.__data.get_measurements_data_points(index+1)
 
         #** Projective ICP 
-        w_T_c1 = self.projective_ICP(next_measurement)
-        print(f'Frame: {index}, w_T_c1: {np.round(w_T_c1, 2)}')
+        w_T_c1 = self.projective_ICP(next_measurement, index)
+        print(f'Frame: {index} - w_T_c1:\n{np.round(w_T_c1, 2)}')
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -100,42 +105,87 @@ class VisualOdometry:
         map = {'position':points_3D, 'appearance':matches['appearance']}
         self.__update_state(w_T_c1, map)
 
-    def projective_ICP(self, image_points):
+    def projective_ICP(self, image_points, index):
         w_T_c0 = self.get_current_pose()
-     
-        for i in range(self.__num_iterations):
+
+        i = 0
+        stop = False
+        
+        counter_early_stopping = 0
+        previous_error = np.Inf
+
+        min_inliners = self.__min_inliners
+
+        while not stop:
+            if i == self.__num_iterations: break
+            print(f'ICP Iteration: {i}')
+
             #matches = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
             matches = data_association_on_appearance(image_points, self.get_map())
             reference_image_points = np.array(matches['points_1'])
             current_world_points = np.array(matches['points_2'])
+            
+            projected_world_points = self.__camera.project_points(current_world_points)
+            fig, ax = plt.subplots()
+            ax.imshow(np.ones((480, 640, 3)))
+            ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
+            ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
+            plt.grid()
+            plt.savefig(f'outputs/frame_{index}/frame_{i}_icp.png')
+            plt.close(fig)
 
-            w_T_c1, stop = self.one_step(reference_image_points, current_world_points, w_T_c0)
-            if w_T_c1 is None: return w_T_c0
+            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, min_inliners)
+            
+            num_inliers = results['num_inliers']
+            chi_inliers = results['chi_inliers']    
+            chi_outliers = results['chi_outliers']
+            error = results['error']
 
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-            if stop: break
+            if computation_done and \
+               (np.abs(previous_error - error) < 0.1 or previous_error < error): counter_early_stopping += 1
+            else: counter_early_stopping = 0
 
+            if error < 1 or counter_early_stopping >= 5: stop = True
+            
+            print('computation_done: ', computation_done)   
+            print('min_inliners: ', min_inliners)
+            print('num_inliers: ', num_inliers)
+            print('chi_inliers: ', chi_inliers)
+            print('chi_outliers: ', chi_outliers)
+            print('kernel_threshold: ', self.__kernel_threshold)
+            print('error: ', error)
+            print('prev error: ', previous_error)
+            print('np.abs(previous_error - error): ', np.abs(previous_error - error))
+            print('counter: ', counter_early_stopping)
+            print('stop: ', stop)
+
+            previous_error = error
+            i += 1
+            print('------------------------------- \n')
+            
         return w_T_c0
 
-    def one_step(self, reference_image_points, current_world_points, w_T_c0):
+    def one_step(self, reference_image_points, current_world_points, w_T_c0, min_inliners):
 
         if (len(current_world_points) == 0): return w_T_c0, True
 
         H, b, num_inliers, chi_inliers, chi_outliers, error = self.linearize(reference_image_points, current_world_points)
-        if num_inliers < self.__min_inliners: return None, None
+        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'error': error}
+
+        if num_inliers < min_inliners: 
+            self.__kernel_threshold += 100
+            return w_T_c0, results, False
+        
+        if self.__kernel_threshold > 500 and error < 20: self.__kernel_threshold -= 100
 
         H += np.eye(6) * self.__dumping_factor
         dx = np.linalg.solve(H, -b)
-        print(np.round(dx, 2))
-        # print(f'total_error: {error}, dx: {np.linalg.norm(dx)}')   
+        w_T_c1 = v2T(dx) @ w_T_c0
 
-        initial_guess = T2v(w_T_c0)
-        updated_guess = initial_guess + dx
-        w_T_c1 = v2T(updated_guess)
-
-        return w_T_c1, error<0.1 or np.linalg.norm(dx)<1e-5
+        return w_T_c1, results, True
 
     def linearize(self, reference_image_points, currrent_world_points):
         H = np.zeros((6, 6))
@@ -149,11 +199,14 @@ class VisualOdometry:
         for i in range(len(reference_image_points)):
             reference_image_point = reference_image_points[i]
             current_world_point = currrent_world_points[i]
-
+            
             e, jacobian = self.error_and_jacobian(reference_image_point, current_world_point)
+            # print('e:', e)
+
             if e is None or jacobian is None: continue
     
             chi = e.T @ e 
+            # print(f'chi: {chi}')
             
             lambda_ = 1.0
             is_inlier = True
@@ -177,6 +230,7 @@ class VisualOdometry:
 
     def error_and_jacobian(self, reference_image_point, current_world_point):
 
+        # print("camera c_T_w: \n", np.round(self.__camera.get_c_T_w(),2))
         is_inside, projected_image_point = self.__camera.project_point(current_world_point)    
         if not is_inside: return None, None
 
@@ -205,6 +259,9 @@ class VisualOdometry:
         self.__add_to_trajectory(pose)
         self.__add_to_global_map(map)
         self.set_current_pose(pose)
+        # print('Updated state: ')
+        # print(f'pose: \n{np.round(pose, 2)}')
+        # print(f'camera c_T_w: \n{np.round(np.linalg.inv(pose), 2)}')
         self.__camera.set_c_T_w(np.linalg.inv(pose))
 
     def __add_to_trajectory(self, pose):
