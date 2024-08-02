@@ -127,14 +127,15 @@ class VisualOdometry:
             reference_image_points = np.array(matches['points_1'])
             current_world_points = np.array(matches['points_2'])
             
-            projected_world_points = self.__camera.project_points(current_world_points)
-            fig, ax = plt.subplots()
-            ax.imshow(np.ones((480, 640, 3)))
-            ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
-            ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
-            plt.grid()
-            plt.savefig(f'outputs/frame_{index}/iteration_{i}_icp.png')
-            plt.close(fig)
+            if False:
+                projected_world_points = self.__camera.project_points(current_world_points)
+                fig, ax = plt.subplots()
+                ax.imshow(np.ones((480, 640, 3)))
+                ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
+                ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
+                plt.grid()
+                plt.savefig(f'outputs/frame_{index}/iteration_{i}_icp.png')
+                plt.close(fig)
 
             w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
             
