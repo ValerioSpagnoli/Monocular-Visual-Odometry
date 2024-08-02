@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=300, dumping_factor=2, min_inliners=2, num_iterations=100):
+    def __init__(self, kernel_threshold=300, dumping_factor=0.5, min_inliners=2, num_iterations=100):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -114,11 +114,11 @@ class VisualOdometry:
         counter_early_stopping = 0
         previous_error = np.Inf
 
+        kernel_threshold = self.__kernel_threshold
         min_inliners = self.__min_inliners
 
         while not stop:
-            if i == self.__num_iterations: break
-            print(f'ICP Iteration: {i}')
+            if i == self.__num_iterations+1: break
 
             #matches = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
             matches = data_association_on_appearance(image_points, self.get_map())
@@ -131,55 +131,61 @@ class VisualOdometry:
             ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
             ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
             plt.grid()
-            plt.savefig(f'outputs/frame_{index}/frame_{i}_icp.png')
+            plt.savefig(f'outputs/frame_{index}/iteration_{i}_icp.png')
             plt.close(fig)
 
-            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, min_inliners)
+            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, min_inliners, kernel_threshold)
             
             num_inliers = results['num_inliers']
             chi_inliers = results['chi_inliers']    
             chi_outliers = results['chi_outliers']
             error = results['error']
+            kernel_threshold = results['kernel_threshold']
 
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-            if computation_done and \
-               (np.abs(previous_error - error) < 0.1 or previous_error < error): counter_early_stopping += 1
-            else: counter_early_stopping = 0
 
+            if min_inliners > self.__min_inliners and \
+               (np.abs(previous_error - error) < 0.1 or previous_error < error or num_inliers < min_inliners): counter_early_stopping += 1
+            else: counter_early_stopping = 0
             if error < 1 or counter_early_stopping >= 5: stop = True
             
+            print('Frame: ', index, ' - PICP Iteration: ', i)
             print('computation_done: ', computation_done)   
             print('min_inliners: ', min_inliners)
             print('num_inliers: ', num_inliers)
             print('chi_inliers: ', chi_inliers)
             print('chi_outliers: ', chi_outliers)
-            print('kernel_threshold: ', self.__kernel_threshold)
+            print('kernel_threshold: ', kernel_threshold)
             print('error: ', error)
             print('prev error: ', previous_error)
             print('np.abs(previous_error - error): ', np.abs(previous_error - error))
             print('counter: ', counter_early_stopping)
             print('stop: ', stop)
+            print('------------------------------- \n')
 
+            if num_inliers > min_inliners: min_inliners = num_inliers
             previous_error = error
             i += 1
-            print('------------------------------- \n')
             
         return w_T_c0
 
-    def one_step(self, reference_image_points, current_world_points, w_T_c0, min_inliners):
+    def one_step(self, reference_image_points, current_world_points, w_T_c0, min_inliners, kernel_threshold):
 
         if (len(current_world_points) == 0): return w_T_c0, True
 
-        H, b, num_inliers, chi_inliers, chi_outliers, error = self.linearize(reference_image_points, current_world_points)
-        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'error': error}
+        H, b, num_inliers, chi_inliers, chi_outliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
+        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'error': error, 'kernel_threshold': kernel_threshold}
 
-        if num_inliers < min_inliners: 
-            self.__kernel_threshold += 100
+        if num_inliers < self.__min_inliners: 
+            kernel_threshold += 100
+            results['kernel_threshold'] = kernel_threshold
             return w_T_c0, results, False
         
-        if self.__kernel_threshold > 500 and error < 20: self.__kernel_threshold -= 100
+        if kernel_threshold > 500 and error < 20: 
+            kernel_threshold -= 100
+            results['kernel_threshold'] = kernel_threshold
 
         H += np.eye(6) * self.__dumping_factor
         dx = np.linalg.solve(H, -b)
@@ -187,7 +193,7 @@ class VisualOdometry:
 
         return w_T_c1, results, True
 
-    def linearize(self, reference_image_points, currrent_world_points):
+    def linearize(self, reference_image_points, currrent_world_points, kernel_threshold):
         H = np.zeros((6, 6))
         b = np.zeros(6)
         num_inliers = 0
@@ -201,17 +207,14 @@ class VisualOdometry:
             current_world_point = currrent_world_points[i]
             
             e, jacobian = self.error_and_jacobian(reference_image_point, current_world_point)
-            # print('e:', e)
-
             if e is None or jacobian is None: continue
-    
+                
             chi = e.T @ e 
-            # print(f'chi: {chi}')
-            
+
             lambda_ = 1.0
             is_inlier = True
-            if chi > self.__kernel_threshold:
-                lambda_ = np.sqrt(self.__kernel_threshold / chi)
+            if chi > kernel_threshold:
+                lambda_ = np.sqrt(kernel_threshold / chi)
                 is_inlier = False
                 chi_outliers += chi
             else:
@@ -225,12 +228,13 @@ class VisualOdometry:
             error += np.linalg.norm(e)
         
         error /= len(reference_image_points)
+        if chi_inliers > 0: chi_inliers /= num_inliers
+        if chi_outliers > 0: chi_outliers /= (len(reference_image_points) - num_inliers)
 
         return H, b, num_inliers, chi_inliers, chi_outliers, error
 
     def error_and_jacobian(self, reference_image_point, current_world_point):
 
-        # print("camera c_T_w: \n", np.round(self.__camera.get_c_T_w(),2))
         is_inside, projected_image_point = self.__camera.project_point(current_world_point)    
         if not is_inside: return None, None
 
@@ -259,9 +263,6 @@ class VisualOdometry:
         self.__add_to_trajectory(pose)
         self.__add_to_global_map(map)
         self.set_current_pose(pose)
-        # print('Updated state: ')
-        # print(f'pose: \n{np.round(pose, 2)}')
-        # print(f'camera c_T_w: \n{np.round(np.linalg.inv(pose), 2)}')
         self.__camera.set_c_T_w(np.linalg.inv(pose))
 
     def __add_to_trajectory(self, pose):
