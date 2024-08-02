@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=300, dumping_factor=0.5, min_inliners=2, num_iterations=100):
+    def __init__(self, kernel_threshold=200, dumping_factor=100, min_inliners=4, num_iterations=200):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -115,6 +115,8 @@ class VisualOdometry:
         previous_error = np.Inf
 
         kernel_threshold = self.__kernel_threshold
+        dumping_factor = self.__dumping_factor
+        base_dumping_factor = self.__dumping_factor
         min_inliners = self.__min_inliners
 
         while not stop:
@@ -134,7 +136,7 @@ class VisualOdometry:
             plt.savefig(f'outputs/frame_{index}/iteration_{i}_icp.png')
             plt.close(fig)
 
-            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, min_inliners, kernel_threshold)
+            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
             
             num_inliers = results['num_inliers']
             chi_inliers = results['chi_inliers']    
@@ -145,11 +147,26 @@ class VisualOdometry:
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
+            new_base_dumping_factor = 1e3
+            if error <= 20 and error > 15: new_base_dumping_factor = 1e3
+            elif error <= 15 and error > 10: new_base_dumping_factor = 1e4
+            elif error <= 10 and error > 5: new_base_dumping_factor = 1e5
+            elif error <= 5: new_base_dumping_factor = 1e6
+            if new_base_dumping_factor > base_dumping_factor: base_dumping_factor = new_base_dumping_factor
 
-            if min_inliners > self.__min_inliners and \
-               (np.abs(previous_error - error) < 0.1 or previous_error < error or num_inliers < min_inliners): counter_early_stopping += 1
+            if error < previous_error and dumping_factor < 1e10: 
+                if i>1: 
+                    increment = 10*((previous_error - error)/previous_error)
+                    if increment < 1: increment = 1
+                else: increment = 1
+ 
+                base_dumping_factor = base_dumping_factor * increment
+                dumping_factor = base_dumping_factor
+
+            if computation_done and np.abs(previous_error - error) < 0.1: counter_early_stopping += 1
             else: counter_early_stopping = 0
-            if error < 1 or counter_early_stopping >= 5: stop = True
+
+            if error < 1 or counter_early_stopping >= 10: stop = True
             
             print('Frame: ', index, ' - PICP Iteration: ', i)
             print('computation_done: ', computation_done)   
@@ -158,6 +175,7 @@ class VisualOdometry:
             print('chi_inliers: ', chi_inliers)
             print('chi_outliers: ', chi_outliers)
             print('kernel_threshold: ', kernel_threshold)
+            print('dumping_factor: ', dumping_factor)
             print('error: ', error)
             print('prev error: ', previous_error)
             print('np.abs(previous_error - error): ', np.abs(previous_error - error))
@@ -171,7 +189,7 @@ class VisualOdometry:
             
         return w_T_c0
 
-    def one_step(self, reference_image_points, current_world_points, w_T_c0, min_inliners, kernel_threshold):
+    def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
         if (len(current_world_points) == 0): return w_T_c0, True
 
@@ -187,7 +205,7 @@ class VisualOdometry:
             kernel_threshold -= 100
             results['kernel_threshold'] = kernel_threshold
 
-        H += np.eye(6) * self.__dumping_factor
+        H += np.eye(6) * dumping_factor
         dx = np.linalg.solve(H, -b)
         w_T_c1 = v2T(dx) @ w_T_c0
 
