@@ -10,8 +10,9 @@ import matplotlib.pyplot as plt
 vo = VisualOdometry()
 vo.initialize()
 
-NUM_FRAMES = 30
-for i in range(1,NUM_FRAMES): vo.update(i)
+NUM_FRAMES = 100
+for i in range(1,NUM_FRAMES): 
+    vo.update(i)
 
 
 # | Plot trajectory in 3D

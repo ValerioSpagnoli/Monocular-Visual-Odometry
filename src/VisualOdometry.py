@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=200, dumping_factor=100, min_inliners=4, num_iterations=200):
+    def __init__(self, kernel_threshold=200, dumping_factor=100, min_inliners=8, num_iterations=300):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -87,13 +87,14 @@ class VisualOdometry:
     def update(self, index):
         if os.path.exists(f'outputs/frame_{index}'): os.system(f'rm -r outputs/frame_{index}')
         os.makedirs(f'outputs/frame_{index}', exist_ok=True)
+        os.makedirs(f'outputs/frame_{index}/icp', exist_ok=True)
+        os.makedirs(f'outputs/frame_{index}/plots', exist_ok=True)
 
         current_measurement = self.__data.get_measurements_data_points(index)
         next_measurement = self.__data.get_measurements_data_points(index+1)
 
         #** Projective ICP 
-        w_T_c1 = self.projective_ICP(next_measurement, index)
-        print(f'Frame: {index} - w_T_c1:\n{np.round(w_T_c1, 2)}')
+        w_T_c1, results = self.projective_ICP(next_measurement, index)
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -116,13 +117,23 @@ class VisualOdometry:
 
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
-        base_dumping_factor = self.__dumping_factor
-        min_inliners = self.__min_inliners
+
+        num_inliers_history = []
+        chi_inliers_history = []
+        chi_outliers_history = []
+        error_history = []
+        dumping_factor_history = []
+        kernel_threshold_history = []
+
+        error_slope_value_ring_buffer = np.ones(10)
+        mean_error_slope_value = 1
+        sigma_error_slope_value = 1
+
+        dumping_factor = 80000
 
         while not stop:
             if i == self.__num_iterations+1: break
-
-            #matches = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
+            
             matches = data_association_on_appearance(image_points, self.get_map())
             reference_image_points = np.array(matches['points_1'])
             current_world_points = np.array(matches['points_2'])
@@ -134,7 +145,7 @@ class VisualOdometry:
                 ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
                 ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
                 plt.grid()
-                plt.savefig(f'outputs/frame_{index}/iteration_{i}_icp.png')
+                plt.savefig(f'outputs/frame_{index}/icp/iteration_{i}_icp.png')
                 plt.close(fig)
 
             w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
@@ -142,68 +153,111 @@ class VisualOdometry:
             num_inliers = results['num_inliers']
             chi_inliers = results['chi_inliers']    
             chi_outliers = results['chi_outliers']
-            error = results['error']
             kernel_threshold = results['kernel_threshold']
 
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-            new_base_dumping_factor = 1e3
-            if error <= 20 and error > 15: new_base_dumping_factor = 1e3
-            elif error <= 15 and error > 10: new_base_dumping_factor = 1e4
-            elif error <= 10 and error > 5: new_base_dumping_factor = 1e5
-            elif error <= 5: new_base_dumping_factor = 1e6
-            if new_base_dumping_factor > base_dumping_factor: base_dumping_factor = new_base_dumping_factor
+            if i>1:
+                error_slope_value = np.abs(previous_error - chi_inliers)
+                error_slope_value_ring_buffer[i % 10] = error_slope_value
+                mean_error_slope_value = np.mean(error_slope_value_ring_buffer)
+                sigma_error_slope_value = np.std(error_slope_value_ring_buffer)
 
-            if error < previous_error and dumping_factor < 1e10: 
-                if i>1: 
-                    increment = 10*((previous_error - error)/previous_error)
-                    if increment < 1: increment = 1
-                else: increment = 1
- 
-                base_dumping_factor = base_dumping_factor * increment
-                dumping_factor = base_dumping_factor
+                # if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e5: 
+                #     dumping_factor *= 2
+                # elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor: 
+                #     dumping_factor /= 2
 
-            if computation_done and np.abs(previous_error - error) < 0.1: counter_early_stopping += 1
-            else: counter_early_stopping = 0
+                if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
+                else: counter_early_stopping = 0
 
-            if error < 1 or counter_early_stopping >= 10: stop = True
+                if counter_early_stopping >= 10: stop = True
             
             print('Frame: ', index, ' - PICP Iteration: ', i)
             print('computation_done: ', computation_done)   
-            print('min_inliners: ', min_inliners)
             print('num_inliers: ', num_inliers)
             print('chi_inliers: ', chi_inliers)
             print('chi_outliers: ', chi_outliers)
             print('kernel_threshold: ', kernel_threshold)
             print('dumping_factor: ', dumping_factor)
-            print('error: ', error)
-            print('prev error: ', previous_error)
-            print('np.abs(previous_error - error): ', np.abs(previous_error - error))
+            print('previous_error: ', previous_error)   
+            print('error: ', chi_inliers)
+            print('mean_error_slope_value: ', mean_error_slope_value)
+            print('sigma_error_slope_value: ', sigma_error_slope_value)
             print('counter: ', counter_early_stopping)
             print('stop: ', stop)
             print('------------------------------- \n')
 
-            if num_inliers > min_inliners: min_inliners = num_inliers
-            previous_error = error
+            num_inliers_history.append(num_inliers)
+            chi_inliers_history.append(chi_inliers)
+            chi_outliers_history.append(chi_outliers)
+            error_history.append(chi_inliers)
+            dumping_factor_history.append(dumping_factor)
+            kernel_threshold_history.append(kernel_threshold)
+
+            previous_error = chi_inliers
             i += 1
-            
-        return w_T_c0
+
+        if False:
+            fig, ax = plt.subplots()
+            ax.plot(num_inliers_history)
+            ax.set_title('Number of inliers')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/num_inliers.png')
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(chi_inliers_history)
+            ax.set_title('Chi inliers')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/chi_inliers.png')
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(chi_outliers_history)
+            ax.set_title('Chi outliers')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/chi_outliers.png')
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(error_history)
+            ax.set_title('Error')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/error.png')
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(dumping_factor_history)
+            ax.set_title('Dumping factor')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/dumping_factor.png')
+            plt.close(fig)
+
+            fig, ax = plt.subplots()
+            ax.plot(kernel_threshold_history)
+            ax.set_title('Kernel threshold')
+            ax.grid()
+            plt.savefig(f'outputs/frame_{index}/plots/kernel_threshold.png') 
+            plt.close(fig)
+                
+        return w_T_c0, results
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
         if (len(current_world_points) == 0): return w_T_c0, True
 
-        H, b, num_inliers, chi_inliers, chi_outliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
-        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'error': error, 'kernel_threshold': kernel_threshold}
+        H, b, num_inliers, chi_inliers, chi_outliers, outlier_mask = self.linearize(reference_image_points, current_world_points, kernel_threshold)
+        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'outlier_mask': outlier_mask, 'kernel_threshold': kernel_threshold}
 
         if num_inliers < self.__min_inliners: 
-            kernel_threshold += 100
+            kernel_threshold += 50
             results['kernel_threshold'] = kernel_threshold
             return w_T_c0, results, False
         
-        if kernel_threshold > 500 and error < 20: 
-            kernel_threshold -= 100
+        if kernel_threshold > self.__kernel_threshold and chi_inliers < 5: 
+            kernel_threshold -= 50
             results['kernel_threshold'] = kernel_threshold
 
         H += np.eye(6) * dumping_factor
@@ -218,8 +272,7 @@ class VisualOdometry:
         num_inliers = 0
         chi_inliers = 0
         chi_outliers = 0
-
-        error = 0
+        outlier_mask = np.zeros(len(reference_image_points))
 
         for i in range(len(reference_image_points)):
             reference_image_point = reference_image_points[i]
@@ -236,6 +289,7 @@ class VisualOdometry:
                 lambda_ = np.sqrt(kernel_threshold / chi)
                 is_inlier = False
                 chi_outliers += chi
+                outlier_mask[i] = 1
             else:
                 num_inliers += 1
                 chi_inliers += chi
@@ -243,15 +297,12 @@ class VisualOdometry:
             if is_inlier:
                 H += jacobian.T @ jacobian * lambda_
                 b += jacobian.T @ e * lambda_
-
-            error += np.linalg.norm(e)
-        
-        error /= len(reference_image_points)
+            
         if chi_inliers > 0: chi_inliers /= num_inliers
         if chi_outliers > 0: chi_outliers /= (len(reference_image_points) - num_inliers)
 
-        return H, b, num_inliers, chi_inliers, chi_outliers, error
-
+        return H, b, num_inliers, chi_inliers, chi_outliers, outlier_mask
+    
     def error_and_jacobian(self, reference_image_point, current_world_point):
 
         is_inside, projected_image_point = self.__camera.project_point(current_world_point)    
