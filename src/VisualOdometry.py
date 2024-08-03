@@ -113,6 +113,8 @@ class VisualOdometry:
         stop = False
         
         counter_early_stopping = 0
+        counter_error_stuck = 0
+        counter_error_flickering = 0
         previous_error = np.Inf
 
         kernel_threshold = self.__kernel_threshold
@@ -129,15 +131,24 @@ class VisualOdometry:
         mean_error_slope_value = 1
         sigma_error_slope_value = 1
 
-        dumping_factor = 80000
+        use_data_association_on_appearance = False
+
+        # matches = data_association_on_appearance(image_points, self.get_map())
+        # reference_image_points = np.array(matches['points_1'])
+        # current_world_points = np.array(matches['points_2'])
 
         while not stop:
             if i == self.__num_iterations+1: break
-            
-            matches = data_association_on_appearance(image_points, self.get_map())
-            reference_image_points = np.array(matches['points_1'])
-            current_world_points = np.array(matches['points_2'])
-            
+
+            if use_data_association_on_appearance: 
+                matches = data_association_on_appearance(image_points, self.get_map())
+                reference_image_points = np.array(matches['points_1'])
+                current_world_points = np.array(matches['points_2'])
+            else:
+                matches = data_association_compatible_2Dto3D(image_points, self.get_map(), self.__camera)
+                reference_image_points = np.array(matches['points_1'])
+                current_world_points = np.array(matches['points_2'])
+
             if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
                 fig, ax = plt.subplots()
@@ -164,28 +175,45 @@ class VisualOdometry:
                 mean_error_slope_value = np.mean(error_slope_value_ring_buffer)
                 sigma_error_slope_value = np.std(error_slope_value_ring_buffer)
 
-                # if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e5: 
-                #     dumping_factor *= 2
-                # elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor: 
-                #     dumping_factor /= 2
+                if not use_data_association_on_appearance:
+                    if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e5: dumping_factor *= 2
+                    elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor:  dumping_factor /= 2
+                else:
+                    dumping_factor = 80000
 
+                if mean_error_slope_value < 1e-1: counter_error_stuck += 1
+                else: counter_error_stuck = 0
+                if sigma_error_slope_value > 1: counter_error_flickering += 1
+                else: counter_error_flickering = 0
+
+                if computation_done and not use_data_association_on_appearance and (counter_error_stuck >= 10 or counter_error_flickering >= 10): 
+                    use_data_association_on_appearance = True
+                    counter_error_stuck = 0
+                    counter_error_flickering = 0
+                    dumping_factor = self.__dumping_factor
+                
+                if computation_done and use_data_association_on_appearance and (counter_error_stuck >= 10 or counter_error_flickering >= 10): 
+                    use_data_association_on_appearance = False
+                    counter_error_stuck = 0
+                    counter_error_flickering = 0
+                
                 if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
                 else: counter_early_stopping = 0
-
                 if counter_early_stopping >= 10: stop = True
             
             print('Frame: ', index, ' - PICP Iteration: ', i)
             print('computation_done: ', computation_done)   
             print('num_inliers: ', num_inliers)
-            print('chi_inliers: ', chi_inliers)
-            print('chi_outliers: ', chi_outliers)
             print('kernel_threshold: ', kernel_threshold)
             print('dumping_factor: ', dumping_factor)
             print('previous_error: ', previous_error)   
             print('error: ', chi_inliers)
             print('mean_error_slope_value: ', mean_error_slope_value)
             print('sigma_error_slope_value: ', sigma_error_slope_value)
-            print('counter: ', counter_early_stopping)
+            print('counter early stopping: ', counter_early_stopping)
+            print('counter error stuck: ', counter_error_stuck)
+            print('counter error flickering: ', counter_error_flickering)
+            print('use_data_association_on_appearance: ', use_data_association_on_appearance)
             print('stop: ', stop)
             print('------------------------------- \n')
 

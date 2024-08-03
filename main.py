@@ -10,7 +10,7 @@ import matplotlib.pyplot as plt
 vo = VisualOdometry()
 vo.initialize()
 
-NUM_FRAMES = 100
+NUM_FRAMES = 25
 for i in range(1,NUM_FRAMES): 
     vo.update(i)
 
