@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=200, dumping_factor=100, min_inliners=8, num_iterations=300):
+    def __init__(self, kernel_threshold=200, dumping_factor=1000, min_inliners=8, num_iterations=400):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -127,7 +127,8 @@ class VisualOdometry:
         dumping_factor_history = []
         kernel_threshold_history = []
 
-        error_slope_value_ring_buffer = np.ones(10)
+        limit = 10
+        error_slope_value_ring_buffer = np.ones(limit)
         mean_error_slope_value = 1
         sigma_error_slope_value = 1
 
@@ -171,35 +172,37 @@ class VisualOdometry:
 
             if i>1:
                 error_slope_value = np.abs(previous_error - chi_inliers)
-                error_slope_value_ring_buffer[i % 10] = error_slope_value
+                error_slope_value_ring_buffer[i % limit] = error_slope_value
                 mean_error_slope_value = np.mean(error_slope_value_ring_buffer)
                 sigma_error_slope_value = np.std(error_slope_value_ring_buffer)
 
                 if not use_data_association_on_appearance:
-                    if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e5: dumping_factor *= 2
-                    elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor:  dumping_factor /= 2
+                    if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e8: dumping_factor *= 2
+                    # elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor:  dumping_factor /= 2
                 else:
                     dumping_factor = 80000
 
+
                 if mean_error_slope_value < 1e-1: counter_error_stuck += 1
                 else: counter_error_stuck = 0
-                if sigma_error_slope_value > 1: counter_error_flickering += 1
+                if sigma_error_slope_value > 1e-1: counter_error_flickering += 1
                 else: counter_error_flickering = 0
 
-                if computation_done and not use_data_association_on_appearance and (counter_error_stuck >= 10 or counter_error_flickering >= 10): 
+                if computation_done and not use_data_association_on_appearance and counter_error_stuck >= limit: 
                     use_data_association_on_appearance = True
                     counter_error_stuck = 0
                     counter_error_flickering = 0
                 
-                if computation_done and use_data_association_on_appearance and (counter_error_stuck >= 10 or counter_error_flickering >= 10): 
+                if computation_done and use_data_association_on_appearance and (counter_error_stuck >= limit or counter_error_flickering >= limit): 
                     use_data_association_on_appearance = False
                     counter_error_stuck = 0
                     counter_error_flickering = 0
                     dumping_factor = self.__dumping_factor
                 
+
                 if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
                 else: counter_early_stopping = 0
-                if counter_early_stopping >= 10: stop = True
+                if (computation_done and chi_inliers < 1) or counter_early_stopping >= limit: stop = True
             
             print('Frame: ', index, ' - PICP Iteration: ', i)
             print('computation_done: ', computation_done)   

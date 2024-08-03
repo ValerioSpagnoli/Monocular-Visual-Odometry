@@ -6,14 +6,25 @@ from src.data_association import *
 import numpy as np
 import plotly.graph_objects as go   
 import matplotlib.pyplot as plt
+import time
+
+start = time.time()
+mean_time_per_frame = 0
 
 vo = VisualOdometry()
 vo.initialize()
 
-NUM_FRAMES = 25
+NUM_FRAMES = 100
 for i in range(1,NUM_FRAMES): 
+    start_frame = time.time()
     vo.update(i)
+    end_frame = time.time()
+    mean_time_per_frame += end_frame-start_frame
 
+mean_time_per_frame /= NUM_FRAMES
+end = time.time()
+print(f'Time elapsed: {end-start} [s] - {(end-start)/60} [min]')
+print(f'Mean time per frame: {mean_time_per_frame} [s]')
 
 # | Plot trajectory in 3D
 estimated_trajectory = vo.get_trajectory()
