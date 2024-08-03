@@ -139,18 +139,14 @@ class VisualOdometry:
         while not stop:
             if i == self.__num_iterations+1: break
 
-            matches_appearance = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
+            matches_appearance = data_association_on_appearance(image_points, self.get_map())
             reference_image_points_appearance = np.array(matches_appearance['points_1'])
             current_world_points_appearance = np.array(matches_appearance['points_2'])
-            current_projected_world_points_appearance = np.array(matches_appearance['projected_points_2'])
-            distance_matches_appearance = np.mean(np.linalg.norm(reference_image_points_appearance - current_projected_world_points_appearance, axis=1))
 
             matches_2Dto3D = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
             reference_image_points_2Dto3D = np.array(matches_2Dto3D['points_1'])
             current_world_points_2Dto3D = np.array(matches_2Dto3D['points_2'])
-            current_reprojected_world_points_2Dto3D = self.__camera.project_points(current_world_points_2Dto3D)
-            distance_matches_2Dto3D = np.mean(np.linalg.norm(reference_image_points_2Dto3D - current_reprojected_world_points_2Dto3D, axis=1))
-  
+
             if use_data_association_on_appearance: 
                 reference_image_points = reference_image_points_appearance
                 current_world_points = current_world_points_appearance
@@ -209,8 +205,6 @@ class VisualOdometry:
                     counter_error_flickering = 0
                     dumping_factor = self.__dumping_factor
                 
-
-                
                 if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
                 else: counter_early_stopping = 0
                 if (computation_done and chi_inliers < 1) or counter_early_stopping >= limit: stop = True
@@ -227,8 +221,6 @@ class VisualOdometry:
             print('counter early stopping: ', counter_early_stopping)
             print('counter error stuck: ', counter_error_stuck)
             print('counter error flickering: ', counter_error_flickering)
-            print('distance_matches_appearance: ', distance_matches_appearance) 
-            print('distance_matches_2Dto3D: ', distance_matches_2Dto3D)
             print('use_data_association_on_appearance: ', use_data_association_on_appearance)
             print('counter_data_association_on_appearance: ', counter_data_association_on_appearance)
             print('counter_data_association_3Dto2D: ', counter_data_association_3Dto2D)
