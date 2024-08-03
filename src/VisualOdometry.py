@@ -190,12 +190,12 @@ class VisualOdometry:
                     use_data_association_on_appearance = True
                     counter_error_stuck = 0
                     counter_error_flickering = 0
-                    dumping_factor = self.__dumping_factor
                 
                 if computation_done and use_data_association_on_appearance and (counter_error_stuck >= 10 or counter_error_flickering >= 10): 
                     use_data_association_on_appearance = False
                     counter_error_stuck = 0
                     counter_error_flickering = 0
+                    dumping_factor = self.__dumping_factor
                 
                 if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
                 else: counter_early_stopping = 0
