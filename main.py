@@ -11,17 +11,19 @@ import time
 start = time.time()
 mean_time_per_frame = 0
 
-vo = VisualOdometry()
-vo.initialize()
+initial_frame = 0
+final_frame = 70
 
-NUM_FRAMES = 100
-for i in range(1,NUM_FRAMES): 
+vo = VisualOdometry()
+vo.initialize(initial_frame=initial_frame)
+
+for i in range(initial_frame+1,final_frame+1): 
     start_frame = time.time()
     vo.update(i)
     end_frame = time.time()
     mean_time_per_frame += end_frame-start_frame
 
-mean_time_per_frame /= NUM_FRAMES
+mean_time_per_frame /= (final_frame-initial_frame)
 end = time.time()
 print(f'Time elapsed: {end-start} [s] - {(end-start)/60} [min]')
 print(f'Mean time per frame: {mean_time_per_frame} [s]')
@@ -47,10 +49,11 @@ for i in range(len(estimated_trajectory)):
 
 gt_poses = []
 gt_positions = []
-for i in range(1,NUM_FRAMES+1):
-    x_gt, y_gt, theta_gt = gt_trajectory[i]
-    gt_poses.append(np.array([x_gt, y_gt, 0, 0, 0, theta_gt]))
-    gt_positions.append(np.array([x_gt, y_gt, 0]))
+initial_frame_pose = np.array([gt_trajectory[initial_frame][0], gt_trajectory[initial_frame][1], 0, 0, 0, gt_trajectory[initial_frame][2]])
+for i in range(initial_frame+1,final_frame+1):
+    pose = np.array([gt_trajectory[i][0], gt_trajectory[i][1], 0, 0, 0, gt_trajectory[i][2]]) - initial_frame_pose
+    gt_poses.append(pose)
+    gt_positions.append(np.array([pose[0], pose[1], pose[2]]))
     
 fig = go.Figure()
 scale = 0.208

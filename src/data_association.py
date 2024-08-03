@@ -1,20 +1,43 @@
 import numpy as np
 
-def data_association_on_appearance(set_1, set_2):
+def data_association_on_appearance(set_1, set_2, projection=0, camera=None):
     points_1 = set_1['position']
     appearance_1 = set_1['appearance']
 
     points_2 = set_2['position']
     appearance_2 = set_2['appearance']
 
-    matches = {'points_1':[], 'points_2':[], 'appearance':[]}
+    if projection == 1: matches = {'points_1':[], 'projected_points_1':[], 'points_2':[], 'appearance':[]}
+    elif projection == 2: matches = {'points_1':[], 'points_2':[], 'projected_points_2':[], 'appearance':[]}
+    else: matches = {'points_1':[], 'points_2':[], 'appearance':[]}
 
     for i in range(len(points_1)):
         for j in range(len(points_2)):
             if appearance_1[i] == appearance_2[j]:
-                matches['points_1'].append(points_1[i])
-                matches['points_2'].append(points_2[j])
-                matches['appearance'].append(appearance_1[i])
+                point_1 = points_1[i]
+                point_2 = points_2[j]
+                appearance = appearance_1[i]
+
+                if projection == 1:
+                    is_inside, projected_point_1 = camera.project_point(point_1)
+                    if not is_inside: continue
+                    matches['points_1'].append(point_1)
+                    matches['projected_points_1'].append(projected_point_1)
+                    matches['points_2'].append(point_2)
+                    matches['appearance'].append(appearance)
+                    
+                elif projection == 2:
+                    is_inside, projected_point_2 = camera.project_point(point_2)
+                    if not is_inside: continue
+                    matches['points_1'].append(point_1)
+                    matches['points_2'].append(point_2)
+                    matches['projected_points_2'].append(projected_point_2)
+                    matches['appearance'].append(appearance)
+
+                else:
+                    matches['points_1'].append(point_1)
+                    matches['points_2'].append(point_2)
+                    matches['appearance'].append(appearance)
 
     return matches
 
@@ -50,66 +73,37 @@ def data_association_on_distance(set_1, set_2):
     return matches, mean_distance, mean_appereance_distance
 
 def data_association_2Dto3D(image_points, world_points, camera):
-    image_points_position = image_points['position']
-    image_points_appereance = image_points['appearance']
+    matches = data_association_on_appearance(image_points, world_points, projection=2, camera=camera)
 
-    world_points_position = world_points['position']
-    world_points_appereance = world_points['appearance']
+    image_points_position = matches['points_1']
+    world_points_position = matches['points_2']
+    projected_world_points_position = matches['projected_points_2']
+    appearance = matches['appearance']
     
-    matches = {'points_1':[], 'appearance_1':[], 'points_2':[], 'appearance_2':[]}
+    matches = {'points_1':[], 'points_2':[], 'projected_points_2':[], 'appearance':[], 'distance':[]}
+    matched_image_points = []
 
-    mean_distance = 0
-    mean_appearance_distance = 0
     for i in range(len(image_points_position)):
+        if i in matched_image_points: continue
+
         image_point = image_points_position[i]
         min_distance = np.inf
         min_index = -1
-        
-        for j in range(len(world_points_position)):
-            world_point = world_points_position[j]
-            is_inside, projected_image_point = camera.project_point(world_point)
-            if not is_inside: continue
-            distance = np.linalg.norm(image_point-projected_image_point)
+
+        for j in range(len(projected_world_points_position)):
+            projected_world_point = projected_world_points_position[j]
+            distance = np.linalg.norm(image_point-projected_world_point)
             if distance < min_distance:
                 min_distance = distance
                 min_index = j
         
-        matches['points_1'].append(image_point)
-        matches['appearance_1'].append(image_points_appereance[i])
-        matches['points_2'].append(world_points_position[min_index])
-        matches['appearance_2'].append(world_points_appereance[min_index])
-        mean_distance += min_distance
-        mean_appearance_distance += np.linalg.norm(np.array(image_points_appereance[i])-np.array(world_points_appereance[min_index]))
+        if min_index != -1: matched_image_points.append((i, min_index))
 
-    mean_distance /= len(image_points_position)
-    mean_appearance_distance /= len(image_points_position)
-
-    return matches, mean_distance, mean_appearance_distance
-
-def data_association_compatible_2Dto3D(image_points, world_points, camera):    
-    matches, mean_distance, mean_appearance_distance = data_association_2Dto3D(image_points, world_points, camera)
-
-    image_points_position = []
-    image_points_appearance = []
-    world_points_position = []
-    world_points_appearance = []
-
-    for i in range(len(matches['points_1'])):
-        image_point_position = matches['points_1'][i]
-        image_point_appearance = matches['appearance_1'][i]
-        
-        projected_world_point_position = camera.project_point(matches['points_2'][i])[1]
-        projected_world_point_appearance = matches['appearance_2'][i]
-
-        distance = np.linalg.norm(image_point_position-projected_world_point_position)
-        appearance_distance = np.linalg.norm(np.array(image_point_appearance)-np.array(projected_world_point_appearance))
-
-        if distance < mean_distance and appearance_distance < mean_appearance_distance:
-            image_points_position.append(image_point_position)
-            image_points_appearance.append(image_point_appearance)
-            world_points_position.append(matches['points_2'][i])
-            world_points_appearance.append(matches['appearance_2'][i])
-            
-    matches = {'points_1':image_points_position, 'appearance_1':image_points_appearance, 'points_2':world_points_position, 'appearance_2':world_points_appearance}
+    for i, j in matched_image_points:
+        matches['points_1'].append(image_points_position[i])
+        matches['points_2'].append(world_points_position[j])
+        matches['projected_points_2'].append(projected_world_points_position[j])
+        matches['appearance'].append(appearance[i])
+        matches['distance'].append(np.linalg.norm(image_points_position[i]-projected_world_points_position[j]))
 
     return matches

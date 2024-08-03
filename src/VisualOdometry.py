@@ -9,7 +9,7 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=200, dumping_factor=1000, min_inliners=8, num_iterations=400):
+    def __init__(self, kernel_threshold=200, dumping_factor=1000, min_inliners=10, num_iterations=300):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
@@ -58,9 +58,9 @@ class VisualOdometry:
         return points_3D.T
 
 
-    def initialize(self):
-        measurement_0 = self.__data.get_measurements_data_points(0)
-        measurement_1 = self.__data.get_measurements_data_points(1)
+    def initialize(self, initial_frame=0):
+        measurement_0 = self.__data.get_measurements_data_points(initial_frame)
+        measurement_1 = self.__data.get_measurements_data_points(initial_frame+1)
  
         matches = data_association_on_appearance(measurement_0, measurement_1)
         points_0 = np.array(matches['points_1'])
@@ -115,6 +115,8 @@ class VisualOdometry:
         counter_early_stopping = 0
         counter_error_stuck = 0
         counter_error_flickering = 0
+        counter_data_association_on_appearance = 0
+        counter_data_association_3Dto2D = 0
         previous_error = np.Inf
 
         kernel_threshold = self.__kernel_threshold
@@ -134,21 +136,27 @@ class VisualOdometry:
 
         use_data_association_on_appearance = False
 
-        # matches = data_association_on_appearance(image_points, self.get_map())
-        # reference_image_points = np.array(matches['points_1'])
-        # current_world_points = np.array(matches['points_2'])
-
         while not stop:
             if i == self.__num_iterations+1: break
 
+            matches_appearance = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
+            reference_image_points_appearance = np.array(matches_appearance['points_1'])
+            current_world_points_appearance = np.array(matches_appearance['points_2'])
+            current_projected_world_points_appearance = np.array(matches_appearance['projected_points_2'])
+            distance_matches_appearance = np.mean(np.linalg.norm(reference_image_points_appearance - current_projected_world_points_appearance, axis=1))
+
+            matches_2Dto3D = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
+            reference_image_points_2Dto3D = np.array(matches_2Dto3D['points_1'])
+            current_world_points_2Dto3D = np.array(matches_2Dto3D['points_2'])
+            current_reprojected_world_points_2Dto3D = self.__camera.project_points(current_world_points_2Dto3D)
+            distance_matches_2Dto3D = np.mean(np.linalg.norm(reference_image_points_2Dto3D - current_reprojected_world_points_2Dto3D, axis=1))
+  
             if use_data_association_on_appearance: 
-                matches = data_association_on_appearance(image_points, self.get_map())
-                reference_image_points = np.array(matches['points_1'])
-                current_world_points = np.array(matches['points_2'])
+                reference_image_points = reference_image_points_appearance
+                current_world_points = current_world_points_appearance
             else:
-                matches = data_association_compatible_2Dto3D(image_points, self.get_map(), self.__camera)
-                reference_image_points = np.array(matches['points_1'])
-                current_world_points = np.array(matches['points_2'])
+                reference_image_points = reference_image_points_2Dto3D
+                current_world_points = current_world_points_2Dto3D
 
             if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
@@ -182,11 +190,13 @@ class VisualOdometry:
                 else:
                     dumping_factor = 80000
 
-
                 if mean_error_slope_value < 1e-1: counter_error_stuck += 1
                 else: counter_error_stuck = 0
                 if sigma_error_slope_value > 1e-1: counter_error_flickering += 1
                 else: counter_error_flickering = 0
+
+                if use_data_association_on_appearance: counter_data_association_on_appearance += 1
+                else: counter_data_association_3Dto2D += 1
 
                 if computation_done and not use_data_association_on_appearance and counter_error_stuck >= limit: 
                     use_data_association_on_appearance = True
@@ -200,6 +210,7 @@ class VisualOdometry:
                     dumping_factor = self.__dumping_factor
                 
 
+                
                 if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
                 else: counter_early_stopping = 0
                 if (computation_done and chi_inliers < 1) or counter_early_stopping >= limit: stop = True
@@ -216,7 +227,11 @@ class VisualOdometry:
             print('counter early stopping: ', counter_early_stopping)
             print('counter error stuck: ', counter_error_stuck)
             print('counter error flickering: ', counter_error_flickering)
+            print('distance_matches_appearance: ', distance_matches_appearance) 
+            print('distance_matches_2Dto3D: ', distance_matches_2Dto3D)
             print('use_data_association_on_appearance: ', use_data_association_on_appearance)
+            print('counter_data_association_on_appearance: ', counter_data_association_on_appearance)
+            print('counter_data_association_3Dto2D: ', counter_data_association_3Dto2D)
             print('stop: ', stop)
             print('------------------------------- \n')
 
@@ -277,7 +292,7 @@ class VisualOdometry:
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
-        if (len(current_world_points) == 0): return w_T_c0, True
+        if (len(current_world_points) == 0): return w_T_c0, None, False
 
         H, b, num_inliers, chi_inliers, chi_outliers, outlier_mask = self.linearize(reference_image_points, current_world_points, kernel_threshold)
         results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'outlier_mask': outlier_mask, 'kernel_threshold': kernel_threshold}
