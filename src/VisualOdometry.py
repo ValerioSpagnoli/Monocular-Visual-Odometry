@@ -118,7 +118,7 @@ class VisualOdometry:
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
         
-        limit = int(self.__num_iterations/10)
+        limit = 10
 
         error_prev = np.inf
         error_slope_ring_buffer = np.zeros(limit)
@@ -129,16 +129,30 @@ class VisualOdometry:
         stuck_counter = 0
         flickering_counter = 0
 
+        phase_1 = True
         stop = False
+        num_of_iteration_phase_1 = 100
+        num_of_iteration_phase_2 = 200
+        icp_iteration_1 = 0
+        icp_iteration_2 = 0
         icp_iteration = 0
         while not stop:
-            if icp_iteration == self.__num_iterations: break
+            if icp_iteration_1 == num_of_iteration_phase_1: phase_1 = False
+            if icp_iteration_2 == num_of_iteration_phase_2: stop = True
+            if phase_1: icp_iteration_1 += 1
+            else: icp_iteration_2 += 1
             icp_iteration += 1
 
-            matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
-            reference_image_points = np.array(matches['points_1'])
-            current_world_points = np.array(matches['points_2'])
-            projected_world_points = np.array(matches['projected_points_2'])
+            if phase_1:
+                matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
+                reference_image_points = np.array(matches['points_1'])
+                current_world_points = np.array(matches['points_2'])
+                projected_world_points = np.array(matches['projected_points_2'])
+            else:
+                matches = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
+                reference_image_points = np.array(matches['points_1'])
+                current_world_points = np.array(matches['points_2'])
+                projected_world_points = np.array(matches['projected_points_2'])
 
             if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
@@ -166,6 +180,8 @@ class VisualOdometry:
                 ax[2].grid()
                 ax[2].set_title('Reference Image Points and Projected World Points')
 
+                fig.suptitle(f'Frame: {frame_index}, Iteration: {icp_iteration}, Phase: {1 if phase_1 else 2}')
+
                 plt.savefig(f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots.png')
                 plt.close(fig)
 
@@ -191,17 +207,16 @@ class VisualOdometry:
             if computation_done and error_mean_slope > 1 and error_sigma_slope > 1: flickering_counter += 1
             else: flickering_counter = 0
 
-            if (dumping_factor/2) > self.__min_dumping_factor and stuck_counter > limit: dumping_factor /= 2
+            if (dumping_factor/2) > self.__min_dumping_factor and (stuck_counter > limit or (stuck_counter == 0 and flickering_counter == 0)): dumping_factor /= 2
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
 
-            if computation_done and error < 1: stop = True
-
-            print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
+            print(f'Frame: {frame_index}, Iteration: {icp_iteration}, Phase: {1 if phase_1 else 2}')
+            print(f'Num of iterations: {icp_iteration_1} - {icp_iteration_2}')
             print(f'Num of reference image points: {len(reference_image_points)}')
             print(f'Num of current world points: {len(current_world_points)}')
             print(f'Num of projected world points: {len(projected_world_points)}')
             print(f'Num inliers: {num_inliers}')
-            print(f'Chi inliers: {error}')
+            print(f'Error: {error}')
             print(f'Kernel threshold: {kernel_threshold}')
             print(f'Dumping factor: {dumping_factor}')
             print(f'Chi inliers slope: {error_slope}')
@@ -210,6 +225,9 @@ class VisualOdometry:
             print(f'Stuck counter: {stuck_counter}')
             print(f'Flickering counter: {flickering_counter}')
             print('-----------------------------------\n')
+
+            if phase_1 and computation_done and error < 1.5: phase_1 = False
+            if not phase_1 and computation_done and error < 1: stop = True
 
         return w_T_c0, results
 

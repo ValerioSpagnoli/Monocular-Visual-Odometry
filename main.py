@@ -12,7 +12,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 40
+final_frame = 30
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
@@ -49,12 +49,11 @@ for i in range(len(estimated_trajectory)):
 gt_poses = []
 gt_positions = []
 initial_frame_pose = np.array([gt_trajectory[initial_frame][0], gt_trajectory[initial_frame][1], 0, 0, 0, gt_trajectory[initial_frame][2]])
-for i in range(initial_frame,final_frame+1):
+for i in range(0, 120):
     pose = np.array([gt_trajectory[i][0], gt_trajectory[i][1], 0, 0, 0, gt_trajectory[i][2]]) - initial_frame_pose
     gt_poses.append(pose)
     gt_positions.append(np.array([pose[0], pose[1], pose[2]]))
 
-    
 fig = go.Figure()
 scale = 0.208
 gt_x_coords = [position[0] for position in gt_positions]
@@ -72,6 +71,10 @@ estimated_y_coords_in_world = [position[1]*scale for position in estimated_posit
 estimated_z_coords_in_world = [position[2]*scale for position in estimated_positions_in_world]
 fig.add_trace(go.Scatter3d(x=estimated_x_coords_in_world, y=estimated_y_coords_in_world, z=estimated_z_coords_in_world, mode='lines', name='Estimated trajectory in world frame', line=dict(color='blue')))
 
+gt_x_coords = [gt_positions[final_frame-1][0]]
+gt_y_coords = [gt_positions[final_frame-1][1]]
+gt_z_coords = [gt_positions[final_frame-1][2]]
+fig.add_trace(go.Scatter3d(x=gt_x_coords, y=gt_y_coords, z=gt_z_coords, mode='markers', name='GT point in final frame', marker=dict(size=2, color='red')))
 
 fig.update_layout(scene=dict(aspectmode='data'))
 fig.show()
