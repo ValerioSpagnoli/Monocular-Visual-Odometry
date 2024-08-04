@@ -12,12 +12,12 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 50
+final_frame = 40
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
 
-for i in range(initial_frame+1,final_frame+1): 
+for i in range(initial_frame+1,final_frame): 
     start_frame = time.time()
     vo.update(i)
     end_frame = time.time()
@@ -35,7 +35,6 @@ gt_trajectory = vo.get_data().get_trajectory_data()
 C = vo.get_camera().get_camera_transform()
  
 estimated_trajectory_in_world = [] 
-
 for i in range(len(estimated_trajectory)):
     pose = estimated_trajectory[i]
     pose_in_world = C @ pose
@@ -50,10 +49,11 @@ for i in range(len(estimated_trajectory)):
 gt_poses = []
 gt_positions = []
 initial_frame_pose = np.array([gt_trajectory[initial_frame][0], gt_trajectory[initial_frame][1], 0, 0, 0, gt_trajectory[initial_frame][2]])
-for i in range(initial_frame+1,final_frame+1):
+for i in range(initial_frame,final_frame+1):
     pose = np.array([gt_trajectory[i][0], gt_trajectory[i][1], 0, 0, 0, gt_trajectory[i][2]]) - initial_frame_pose
     gt_poses.append(pose)
     gt_positions.append(np.array([pose[0], pose[1], pose[2]]))
+
     
 fig = go.Figure()
 scale = 0.208

@@ -186,9 +186,9 @@ class VisualOdometry:
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
             error_prev = error
 
-            if error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
+            if computation_done and error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
             else: stuck_counter = 0
-            if error_sigma_slope > 10: flickering_counter += 1
+            if computation_done and error_mean_slope > 1 and error_sigma_slope > 1: flickering_counter += 1
             else: flickering_counter = 0
 
             if (dumping_factor/2) > self.__min_dumping_factor and stuck_counter > limit: dumping_factor /= 2
