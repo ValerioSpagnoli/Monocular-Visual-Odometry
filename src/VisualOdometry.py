@@ -9,11 +9,17 @@ import os
 import matplotlib.pyplot as plt
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=200, dumping_factor=1000, min_inliners=10, num_iterations=300):
+    def __init__(self, kernel_threshold=1500, dumping_factor=1000, min_inliners=12, num_iterations=150):
 
         #** Projective ICP parameters
         self.__kernel_threshold = kernel_threshold
+        self.__min_kernel_threshold = 200
+        self.__max_kernel_threshold = 1e5
+
         self.__dumping_factor = dumping_factor
+        self.__min_dumping_factor = 100
+        self.__max_dumping_factor = 1e6
+
         self.__min_inliners = min_inliners
         self.__num_iterations = num_iterations
 
@@ -92,7 +98,7 @@ class VisualOdometry:
 
         current_measurement = self.__data.get_measurements_data_points(index)
         next_measurement = self.__data.get_measurements_data_points(index+1)
-
+        
         #** Projective ICP 
         w_T_c1, results = self.projective_ICP(next_measurement, index)
         
@@ -106,180 +112,107 @@ class VisualOdometry:
         map = {'position':points_3D, 'appearance':matches['appearance']}
         self.__update_state(w_T_c1, map)
 
-    def projective_ICP(self, image_points, index):
+    def projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
-
-        i = 0
-        stop = False
-        
-        counter_early_stopping = 0
-        counter_error_stuck = 0
-        counter_error_flickering = 0
-        counter_data_association_on_appearance = 0
-        counter_data_association_3Dto2D = 0
-        previous_error = np.Inf
 
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
+        
+        limit = int(self.__num_iterations/10)
 
-        num_inliers_history = []
-        chi_inliers_history = []
-        chi_outliers_history = []
-        error_history = []
-        dumping_factor_history = []
-        kernel_threshold_history = []
+        chi_inliers_prev = np.inf
+        chi_inliers_slope_ring_buffer = np.zeros(limit)
+        chi_inliers_slope = 0
+        chi_inliers_mean_slope = 0
+        chi_inliers_sigma_slope = 0
+        
+        stuck_counter = 0
+        flickering_counter = 0
 
-        limit = 10
-        error_slope_value_ring_buffer = np.ones(limit)
-        mean_error_slope_value = 1
-        sigma_error_slope_value = 1
-
-        use_data_association_on_appearance = False
-
+        stop = False
+        icp_iteration = 0
         while not stop:
-            if i == self.__num_iterations+1: break
+            if icp_iteration == self.__num_iterations: break
+            icp_iteration += 1
 
-            matches_appearance = data_association_on_appearance(image_points, self.get_map())
-            reference_image_points_appearance = np.array(matches_appearance['points_1'])
-            current_world_points_appearance = np.array(matches_appearance['points_2'])
+            matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
+            reference_image_points = np.array(matches['points_1'])
+            current_world_points = np.array(matches['points_2'])
+            projected_world_points = np.array(matches['projected_points_2'])
 
-            matches_2Dto3D = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
-            reference_image_points_2Dto3D = np.array(matches_2Dto3D['points_1'])
-            current_world_points_2Dto3D = np.array(matches_2Dto3D['points_2'])
-
-            if use_data_association_on_appearance: 
-                reference_image_points = reference_image_points_appearance
-                current_world_points = current_world_points_appearance
-            else:
-                reference_image_points = reference_image_points_2Dto3D
-                current_world_points = current_world_points_2Dto3D
-
-            if False:
+            if True:
                 projected_world_points = self.__camera.project_points(current_world_points)
-                fig, ax = plt.subplots()
-                ax.imshow(np.ones((480, 640, 3)))
-                ax.scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
-                ax.scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
-                plt.grid()
-                plt.savefig(f'outputs/frame_{index}/icp/iteration_{i}_icp.png')
+
+                fig, ax = plt.subplots(1, 3, figsize=(15, 5))
+                ax[0].imshow(np.ones((480, 640, 3)))
+                ax[0].scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
+                ax[0].set_xticks(np.arange(0, 640, 40))
+                ax[0].set_yticks(np.arange(0, 480, 40))
+                ax[0].grid()
+                ax[0].set_title('Reference Image Points')
+
+                ax[1].imshow(np.ones((480, 640, 3)))
+                ax[1].scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
+                ax[1].set_xticks(np.arange(0, 640, 40))
+                ax[1].set_yticks(np.arange(0, 480, 40))
+                ax[1].grid()
+                ax[1].set_title('Projected World Points')
+
+                ax[2].imshow(np.ones((480, 640, 3)))
+                ax[2].scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
+                ax[2].scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
+                ax[2].set_xticks(np.arange(0, 640, 40))
+                ax[2].set_yticks(np.arange(0, 480, 40))
+                ax[2].grid()
+                ax[2].set_title('Reference Image Points and Projected World Points')
+
+                plt.savefig(f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots.png')
                 plt.close(fig)
+
 
             w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
             
             num_inliers = results['num_inliers']
             chi_inliers = results['chi_inliers']    
             chi_outliers = results['chi_outliers']
-            kernel_threshold = results['kernel_threshold']
+            kernel_threshold = kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else results['kernel_threshold']
 
+            if icp_iteration > 1: 
+                chi_inliers_slope = np.abs(chi_inliers_prev - chi_inliers)
+                chi_inliers_slope_ring_buffer[icp_iteration % len(chi_inliers_slope_ring_buffer)] = chi_inliers_slope
+                chi_inliers_mean_slope = np.mean(chi_inliers_slope_ring_buffer)
+                chi_inliers_sigma_slope = np.std(chi_inliers_slope_ring_buffer)
+            
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
+            chi_inliers_prev = chi_inliers
 
-            if i>1:
-                error_slope_value = np.abs(previous_error - chi_inliers)
-                error_slope_value_ring_buffer[i % limit] = error_slope_value
-                mean_error_slope_value = np.mean(error_slope_value_ring_buffer)
-                sigma_error_slope_value = np.std(error_slope_value_ring_buffer)
+            if chi_inliers_mean_slope < 1e-2 and chi_inliers_sigma_slope < 1e-2: stuck_counter += 1
+            else: stuck_counter = 0
+            if chi_inliers_sigma_slope > 10: flickering_counter += 1
+            else: flickering_counter = 0
 
-                if not use_data_association_on_appearance:
-                    if chi_inliers < previous_error and (sigma_error_slope_value > 1 or mean_error_slope_value < 1e-3) and dumping_factor < 1e8: dumping_factor *= 2
-                    # elif sigma_error_slope_value < 1 and dumping_factor > self.__dumping_factor:  dumping_factor /= 2
-                else:
-                    dumping_factor = 80000
+            if (dumping_factor/2) > self.__min_dumping_factor and stuck_counter > limit: dumping_factor /= 2
+            if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
 
-                if mean_error_slope_value < 1e-1: counter_error_stuck += 1
-                else: counter_error_stuck = 0
-                if sigma_error_slope_value > 1e-1: counter_error_flickering += 1
-                else: counter_error_flickering = 0
+            if computation_done and chi_inliers < 1: stop = True
 
-                if use_data_association_on_appearance: counter_data_association_on_appearance += 1
-                else: counter_data_association_3Dto2D += 1
+            print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
+            print(f'Num of reference image points: {len(reference_image_points)}')
+            print(f'Num of current world points: {len(current_world_points)}')
+            print(f'Num of projected world points: {len(projected_world_points)}')
+            print(f'Num inliers: {num_inliers}')
+            print(f'Chi inliers: {chi_inliers}')
+            print(f'Chi outliers: {chi_outliers}')
+            print(f'Kernel threshold: {kernel_threshold}')
+            print(f'Dumping factor: {dumping_factor}')
+            print(f'Chi inliers slope: {chi_inliers_slope}')
+            print(f'Chi inliers mean slope: {chi_inliers_mean_slope}')
+            print(f'Chi inliers sigma slope: {chi_inliers_sigma_slope}')
+            print(f'Stuck counter: {stuck_counter}')
+            print(f'Flickering counter: {flickering_counter}')
+            print('-----------------------------------\n')
 
-                if computation_done and not use_data_association_on_appearance and counter_error_stuck >= limit: 
-                    use_data_association_on_appearance = True
-                    counter_error_stuck = 0
-                    counter_error_flickering = 0
-                
-                if computation_done and use_data_association_on_appearance and (counter_error_stuck >= limit or counter_error_flickering >= limit): 
-                    use_data_association_on_appearance = False
-                    counter_error_stuck = 0
-                    counter_error_flickering = 0
-                    dumping_factor = self.__dumping_factor
-                
-                if computation_done and chi_inliers < 5 and (mean_error_slope_value < 1e-2 or sigma_error_slope_value < 1e-1): counter_early_stopping += 1
-                else: counter_early_stopping = 0
-                if (computation_done and chi_inliers < 1) or counter_early_stopping >= limit: stop = True
-            
-            print('Frame: ', index, ' - PICP Iteration: ', i)
-            print('computation_done: ', computation_done)   
-            print('num_inliers: ', num_inliers)
-            print('kernel_threshold: ', kernel_threshold)
-            print('dumping_factor: ', dumping_factor)
-            print('previous_error: ', previous_error)   
-            print('error: ', chi_inliers)
-            print('mean_error_slope_value: ', mean_error_slope_value)
-            print('sigma_error_slope_value: ', sigma_error_slope_value)
-            print('counter early stopping: ', counter_early_stopping)
-            print('counter error stuck: ', counter_error_stuck)
-            print('counter error flickering: ', counter_error_flickering)
-            print('use_data_association_on_appearance: ', use_data_association_on_appearance)
-            print('counter_data_association_on_appearance: ', counter_data_association_on_appearance)
-            print('counter_data_association_3Dto2D: ', counter_data_association_3Dto2D)
-            print('stop: ', stop)
-            print('------------------------------- \n')
-
-            num_inliers_history.append(num_inliers)
-            chi_inliers_history.append(chi_inliers)
-            chi_outliers_history.append(chi_outliers)
-            error_history.append(chi_inliers)
-            dumping_factor_history.append(dumping_factor)
-            kernel_threshold_history.append(kernel_threshold)
-
-            previous_error = chi_inliers
-            i += 1
-
-        if False:
-            fig, ax = plt.subplots()
-            ax.plot(num_inliers_history)
-            ax.set_title('Number of inliers')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/num_inliers.png')
-            plt.close(fig)
-
-            fig, ax = plt.subplots()
-            ax.plot(chi_inliers_history)
-            ax.set_title('Chi inliers')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/chi_inliers.png')
-            plt.close(fig)
-
-            fig, ax = plt.subplots()
-            ax.plot(chi_outliers_history)
-            ax.set_title('Chi outliers')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/chi_outliers.png')
-            plt.close(fig)
-
-            fig, ax = plt.subplots()
-            ax.plot(error_history)
-            ax.set_title('Error')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/error.png')
-            plt.close(fig)
-
-            fig, ax = plt.subplots()
-            ax.plot(dumping_factor_history)
-            ax.set_title('Dumping factor')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/dumping_factor.png')
-            plt.close(fig)
-
-            fig, ax = plt.subplots()
-            ax.plot(kernel_threshold_history)
-            ax.set_title('Kernel threshold')
-            ax.grid()
-            plt.savefig(f'outputs/frame_{index}/plots/kernel_threshold.png') 
-            plt.close(fig)
-                
         return w_T_c0, results
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
@@ -294,7 +227,7 @@ class VisualOdometry:
             results['kernel_threshold'] = kernel_threshold
             return w_T_c0, results, False
         
-        if kernel_threshold > self.__kernel_threshold and chi_inliers < 5: 
+        if kernel_threshold > self.__min_kernel_threshold and chi_inliers < 5: 
             kernel_threshold -= 50
             results['kernel_threshold'] = kernel_threshold
 
