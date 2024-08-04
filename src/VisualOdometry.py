@@ -120,11 +120,11 @@ class VisualOdometry:
         
         limit = int(self.__num_iterations/10)
 
-        chi_inliers_prev = np.inf
-        chi_inliers_slope_ring_buffer = np.zeros(limit)
-        chi_inliers_slope = 0
-        chi_inliers_mean_slope = 0
-        chi_inliers_sigma_slope = 0
+        error_prev = np.inf
+        error_slope_ring_buffer = np.zeros(limit)
+        error_slope = 0
+        error_mean_slope = 0
+        error_sigma_slope = 0
         
         stuck_counter = 0
         flickering_counter = 0
@@ -140,7 +140,7 @@ class VisualOdometry:
             current_world_points = np.array(matches['points_2'])
             projected_world_points = np.array(matches['projected_points_2'])
 
-            if True:
+            if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
 
                 fig, ax = plt.subplots(1, 3, figsize=(15, 5))
@@ -173,42 +173,40 @@ class VisualOdometry:
             w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
             
             num_inliers = results['num_inliers']
-            chi_inliers = results['chi_inliers']    
-            chi_outliers = results['chi_outliers']
+            error = results['error']    
             kernel_threshold = kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else results['kernel_threshold']
 
             if icp_iteration > 1: 
-                chi_inliers_slope = np.abs(chi_inliers_prev - chi_inliers)
-                chi_inliers_slope_ring_buffer[icp_iteration % len(chi_inliers_slope_ring_buffer)] = chi_inliers_slope
-                chi_inliers_mean_slope = np.mean(chi_inliers_slope_ring_buffer)
-                chi_inliers_sigma_slope = np.std(chi_inliers_slope_ring_buffer)
+                error_slope = np.abs(error_prev - error)
+                error_slope_ring_buffer[icp_iteration % len(error_slope_ring_buffer)] = error_slope
+                error_mean_slope = np.mean(error_slope_ring_buffer)
+                error_sigma_slope = np.std(error_slope_ring_buffer)
             
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
-            chi_inliers_prev = chi_inliers
+            error_prev = error
 
-            if chi_inliers_mean_slope < 1e-2 and chi_inliers_sigma_slope < 1e-2: stuck_counter += 1
+            if error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
             else: stuck_counter = 0
-            if chi_inliers_sigma_slope > 10: flickering_counter += 1
+            if error_sigma_slope > 10: flickering_counter += 1
             else: flickering_counter = 0
 
             if (dumping_factor/2) > self.__min_dumping_factor and stuck_counter > limit: dumping_factor /= 2
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
 
-            if computation_done and chi_inliers < 1: stop = True
+            if computation_done and error < 1: stop = True
 
             print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
             print(f'Num of reference image points: {len(reference_image_points)}')
             print(f'Num of current world points: {len(current_world_points)}')
             print(f'Num of projected world points: {len(projected_world_points)}')
             print(f'Num inliers: {num_inliers}')
-            print(f'Chi inliers: {chi_inliers}')
-            print(f'Chi outliers: {chi_outliers}')
+            print(f'Chi inliers: {error}')
             print(f'Kernel threshold: {kernel_threshold}')
             print(f'Dumping factor: {dumping_factor}')
-            print(f'Chi inliers slope: {chi_inliers_slope}')
-            print(f'Chi inliers mean slope: {chi_inliers_mean_slope}')
-            print(f'Chi inliers sigma slope: {chi_inliers_sigma_slope}')
+            print(f'Chi inliers slope: {error_slope}')
+            print(f'Chi inliers mean slope: {error_mean_slope}')
+            print(f'Chi inliers sigma slope: {error_sigma_slope}')
             print(f'Stuck counter: {stuck_counter}')
             print(f'Flickering counter: {flickering_counter}')
             print('-----------------------------------\n')
@@ -219,15 +217,15 @@ class VisualOdometry:
 
         if (len(current_world_points) == 0): return w_T_c0, None, False
 
-        H, b, num_inliers, chi_inliers, chi_outliers, outlier_mask = self.linearize(reference_image_points, current_world_points, kernel_threshold)
-        results = {'num_inliers': num_inliers, 'chi_inliers': chi_inliers, 'chi_outliers': chi_outliers, 'outlier_mask': outlier_mask, 'kernel_threshold': kernel_threshold}
+        H, b, num_inliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
+        results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
 
         if num_inliers < self.__min_inliners: 
             kernel_threshold += 50
             results['kernel_threshold'] = kernel_threshold
             return w_T_c0, results, False
         
-        if kernel_threshold > self.__min_kernel_threshold and chi_inliers < 5: 
+        if kernel_threshold > self.__min_kernel_threshold and error < 5: 
             kernel_threshold -= 50
             results['kernel_threshold'] = kernel_threshold
 
@@ -240,39 +238,41 @@ class VisualOdometry:
     def linearize(self, reference_image_points, currrent_world_points, kernel_threshold):
         H = np.zeros((6, 6))
         b = np.zeros(6)
-        num_inliers = 0
-        chi_inliers = 0
-        chi_outliers = 0
-        outlier_mask = np.zeros(len(reference_image_points))
+
+        chi_inliers = []
+        errors = []
+        jacobians = []
 
         for i in range(len(reference_image_points)):
             reference_image_point = reference_image_points[i]
             current_world_point = currrent_world_points[i]
             
-            e, jacobian = self.error_and_jacobian(reference_image_point, current_world_point)
-            if e is None or jacobian is None: continue
+            error, jacobian = self.error_and_jacobian(reference_image_point, current_world_point)
+            if error is None or jacobian is None: continue
                 
-            chi = e.T @ e 
+            chi = error.T @ error 
+            if chi <= kernel_threshold:
+                chi_inliers.append(chi)
+                errors.append(error)    
+                jacobians.append(jacobian)
+                 
+        chi_inliers_mean = np.mean(chi_inliers)
+        chi_inliers_mask = np.array(chi_inliers) < chi_inliers_mean
 
-            lambda_ = 1.0
-            is_inlier = True
-            if chi > kernel_threshold:
-                lambda_ = np.sqrt(kernel_threshold / chi)
-                is_inlier = False
-                chi_outliers += chi
-                outlier_mask[i] = 1
-            else:
-                num_inliers += 1
-                chi_inliers += chi
+        chi_inliers = np.array(chi_inliers)[chi_inliers_mask]
+        errors = np.array(errors)[chi_inliers_mask]
+        jacobians = np.array(jacobians)[chi_inliers_mask]
 
-            if is_inlier:
-                H += jacobian.T @ jacobian * lambda_
-                b += jacobian.T @ e * lambda_
-            
-        if chi_inliers > 0: chi_inliers /= num_inliers
-        if chi_outliers > 0: chi_outliers /= (len(reference_image_points) - num_inliers)
+        for i in range(len(errors)):
+            error = errors[i]
+            jacobian = jacobians[i]
+            H += jacobian.T @ jacobian 
+            b += jacobian.T @ error
 
-        return H, b, num_inliers, chi_inliers, chi_outliers, outlier_mask
+        num_inliers = len(errors)
+        error = np.mean(chi_inliers) if num_inliers > 0 else np.inf 
+
+        return H, b, num_inliers, error
     
     def error_and_jacobian(self, reference_image_point, current_world_point):
 
