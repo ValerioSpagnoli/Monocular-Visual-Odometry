@@ -110,7 +110,6 @@ class VisualOdometry:
         
         #** Projective ICP 
         w_T_c1 = self.projective_ICP(next_measurement, index)
-        print(w_T_c1)
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -237,8 +236,8 @@ class VisualOdometry:
         w_T_c0 = best_transform
         self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-        # print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
-        # print('##################################\n')
+        print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
+        print('##################################\n')
 
         return w_T_c0
 
@@ -259,7 +258,6 @@ class VisualOdometry:
             results['kernel_threshold'] = kernel_threshold
 
         H += np.eye(6) * dumping_factor
-        # dx = np.linalg.solve(H, -b)
         dx = np.linalg.lstsq(H, -b, rcond=None)[0]
         w_T_c1 = v2T(dx) @ w_T_c0
 
@@ -334,8 +332,6 @@ class VisualOdometry:
         self.__add_to_global_map(map)
         self.set_current_pose(pose)
         self.__camera.set_c_T_w(np.linalg.inv(pose))
-
-        print(len(self.get_map()['position']))
 
     def __add_to_trajectory(self, pose):
         self.__trajectory.append(pose)

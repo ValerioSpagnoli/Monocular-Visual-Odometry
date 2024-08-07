@@ -61,9 +61,26 @@ def skew(w):
                      [ w[2],     0, -w[0]], 
                      [-w[1],  w[0],    0]])
 
-def trajectory2world(trajectory, C):
-    trajectory_world = []
-    for i in range(len(trajectory)):
-        pose = C @ trajectory[i]
-        trajectory_world.append(pose)
-    return trajectory_world
+def translate(poses, T=np.eye(4), scale=1, are_points=False):
+    translated = []
+    for i in range(len(poses)):
+        pose = poses[i]
+        if are_points: pose = v2T([pose[0], pose[1], pose[2], 0, 0, 0])
+        
+        #* scale
+        R = pose[:3,:3]
+        t = pose[:3,3]
+        pose = Rt2T(R=R, t=t*scale)
+
+        #* translate
+        pose = T @ pose
+
+        if are_points: translated.append(pose[:3,3])
+        else: translated.append(pose)
+    return translated
+
+def poses2positions(poses):
+    positions = []
+    for i in range(len(poses)):
+        positions.append(poses[i][:3,3])
+    return positions

@@ -13,7 +13,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 50
+final_frame = 45
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
@@ -25,20 +25,29 @@ for i in range(initial_frame+1,final_frame):
 mean_time_per_frame /= (final_frame-initial_frame)
 end = time.time()
 
-C = vo.get_camera().get_camera_transform()
+
+gt_trajectory = vo.get_data().get_trajectory_data_poses()
+gt_world_points = vo.get_data().get_world_data()['position']
 
 estimated_trajectory = vo.get_trajectory()
-estimated_trajectory_in_world = trajectory2world(estimated_trajectory, C)
-gt_trajectory = vo.get_data().get_trajectory_data_poses()
+estimated_world_points_position = vo.get_map()['position']
+estimated_world_points_appearance = vo.get_map()['appearance']
 
-estimated_world_points = vo.get_map()['position']
-gt_world_points = vo.get_data().get_world_data()['position']
-matches = data_association_on_appearance(vo.get_map(), vo.get_data().get_world_data())
-estimated_world_points_matched = matches['points_1']
+C = vo.get_camera().get_camera_transform()
+
+T_1 = gt_trajectory[initial_frame]
+T_2 = np.eye(4)
+T_2[:3,:3] = C[:3,:3]
+T = T_1 @ T_2
+scale = 0.208
+
+estimated_trajectory_in_world = translate(estimated_trajectory, T, scale=scale)
+estimated_world_points_in_world = translate(estimated_world_points_position, T, are_points=True, scale=scale)
+
+matches = data_association_on_appearance({'position':estimated_world_points_in_world, 'appearance':estimated_world_points_appearance}, vo.get_data().get_world_data())
+estimated_world_points_in_world_matched = matches['points_1']
 gt_world_points_matched = matches['points_2']
 
-
-#scale = 0.208
 
 delta_poses_estimated_trajectory = []
 for i in range(len(estimated_trajectory_in_world)-1):
@@ -68,15 +77,14 @@ for i in range(len(delta_poses_estimated_trajectory)):
     translation_errors.append(translation_error)
 
 #scale = 1/np.mean(translation_errors)
-scale = 0.208
-scaled_estimated_world_points_matched = [scale*np.array(point) for point in estimated_world_points_matched]
-rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(scaled_estimated_world_points_matched)-np.array(gt_world_points_matched), axis=1)**2))
+scaled_estimated_world_points_in_world_matched = [scale*np.array(point) for point in estimated_world_points_in_world_matched]
+rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(scaled_estimated_world_points_in_world_matched)-np.array(gt_world_points_matched), axis=1)**2))
 
 print(f'Number of frames:       {final_frame-initial_frame}')
 print(f'Time elapsed:           {end-start} [s] - {(end-start)/60} [min]')
 print(f'Mean time per frame:    {mean_time_per_frame} [s]')
 print()
-print(f'Number of world points: {len(estimated_world_points)}')
+print(f'Number of world points: {len(estimated_world_points_position)}')
 print(f'RMSE world map:         {rmse_world_map}')
 print()
 print(f'Max rotation error:     {np.max(rotation_errors)}')
@@ -90,13 +98,16 @@ print(f'scale:                  {1/np.mean(translation_errors)}')
 
 
 fig = go.Figure()
-plot_trajectory(fig, estimated_trajectory, scale=scale, name='Estimated trajectory', color='red', width=4)
-plot_trajectory(fig, estimated_trajectory_in_world, scale=scale, name='Estimated trajectory in world', color='blue', width=4)
-plot_trajectory(fig, gt_trajectory, name='Ground Truth trajectory', color='green', width=4)
-plot_point(fig, gt_trajectory[final_frame-1], pose=True, name='Final GT pose', color='red', size=3)
-plot_points(fig, estimated_world_points, pose=False, C=C, name='Map in world', scale=scale, color='orange', size=2)
-plot_points(fig, gt_world_points, pose=False, name='Ground Truth map', color='green', size=2)
-plot_points(fig, gt_world_points_matched, pose=False, name='Ground Truth map matched', color='blue', size=2)
+plot_points(fig, poses2positions([gt_trajectory[initial_frame]]), name='Initial GT pose', mode='markers', color='blue', size=3)
+plot_points(fig, poses2positions([gt_trajectory[final_frame]]), name='Final GT pose', mode='markers', color='blue', size=3)
+
+plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='lines', color='blue', width=3)
+plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory in world', mode='lines', color='red', width=5)
+
+plot_points(fig, estimated_world_points_in_world, name='Map in world', mode='markers', color='orange', size=2)
+plot_points(fig, gt_world_points, name='Ground Truth map', mode='markers', color='green', size=2)
  
+plot_matches(fig, estimated_world_points_in_world_matched, gt_world_points_matched, name='Map matches', color='blue', width=2)
+
 fig.update_layout(scene=dict(aspectmode='data'))
 fig.show()

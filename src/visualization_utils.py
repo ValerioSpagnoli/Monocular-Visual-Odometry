@@ -4,42 +4,27 @@ import numpy as np
 from src.utils import *
 
 
-def plot_trajectory(fig, trajectory, C=np.eye(4), scale=1, name='Trajectory', color='blue', width=4):     
-    trajectory = trajectory2world(trajectory, C)
+def plot_points(fig, points, name='points', mode='markers', color='blue', size=2, width=2):     
 
-    trajectory_positions = []
-    for i in range(len(trajectory)):
-        position = trajectory[i][:3, 3]
-        trajectory_positions.append(position)
+    x_coords = [position[0] for position in points]
+    y_coords = [position[1] for position in points]
+    z_coords = [position[2] for position in points]
 
-    x_coords = [position[0]*scale for position in trajectory_positions]
-    y_coords = [position[1]*scale for position in trajectory_positions]
-    z_coords = [position[2]*scale for position in trajectory_positions]
+    if mode == 'lines': fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='lines', name=name, line=dict(color=color, width=width)))
+    elif mode == 'markers': fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='markers', name=name, marker=dict(color=color, size=size)))
 
-    fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='lines', name=name, line=dict(color=color, width=width)))
+def plot_matches(fig, set_1, set_2, name='Matches', color='blue', width=2):
+    for i in range(len(set_1)):
+        x_coord_1 = set_1[i][0]
+        y_coord_1 = set_1[i][1]
+        z_coord_1 = set_1[i][2]
 
-def plot_point(fig, point, pose=False, C=np.eye(4), scale=1, name='Point', color='blue', size=2):
-    if not pose: point = v2T([point[0], point[1], point[2], 0, 0, 0])
-    point = C @ point
-    point_position = point[:3, 3]
+        x_coord_2 = set_2[i][0]
+        y_coord_2 = set_2[i][1]
+        z_coord_2 = set_2[i][2]
 
-    x_coords = [point_position[0]*scale]
-    y_coords = [point_position[1]*scale]
-    z_coords = [point_position[2]*scale]
+        x_coords = [x_coord_1, x_coord_2]
+        y_coords = [y_coord_1, y_coord_2]
+        z_coords = [z_coord_1, z_coord_2]
 
-    fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='markers', name=name, marker=dict(size=size, color=color)))
-
-def plot_points(fig, points, pose=False, C=np.eye(4), scale=1, name='Points', color='blue', size=2):
-    points_positions = []
-    for i in range(len(points)):
-        point = points[i]
-        if not pose: point = v2T([point[0], point[1], point[2], 0, 0, 0])
-        point = C @ point
-        point_position = point[:3, 3]
-        points_positions.append(point_position)
-
-    x_coords = [point[0]*scale for point in points_positions]
-    y_coords = [point[1]*scale for point in points_positions]
-    z_coords = [point[2]*scale for point in points_positions]
-
-    fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='markers', name=name, marker=dict(size=size, color=color)))
+        fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='lines', name=name, line=dict(color=color, width=width)))
