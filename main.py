@@ -12,7 +12,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 30
+final_frame = 45
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)

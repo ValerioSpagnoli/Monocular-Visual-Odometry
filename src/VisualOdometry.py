@@ -100,7 +100,7 @@ class VisualOdometry:
         next_measurement = self.__data.get_measurements_data_points(index+1)
         
         #** Projective ICP 
-        w_T_c1, results = self.projective_ICP(next_measurement, index)
+        w_T_c1 = self.projective_ICP(next_measurement, index)
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -114,6 +114,7 @@ class VisualOdometry:
 
     def projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
+        w_T_c0_ = w_T_c0.copy()
 
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
@@ -129,30 +130,18 @@ class VisualOdometry:
         stuck_counter = 0
         flickering_counter = 0
 
-        phase_1 = True
+        transforms = {'T':[], 'error':[]}
+
         stop = False
-        num_of_iteration_phase_1 = 100
-        num_of_iteration_phase_2 = 200
-        icp_iteration_1 = 0
-        icp_iteration_2 = 0
         icp_iteration = 0
         while not stop:
-            if icp_iteration_1 == num_of_iteration_phase_1: phase_1 = False
-            if icp_iteration_2 == num_of_iteration_phase_2: stop = True
-            if phase_1: icp_iteration_1 += 1
-            else: icp_iteration_2 += 1
+            if icp_iteration == self.__num_iterations: break
             icp_iteration += 1
 
-            if phase_1:
-                matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
-                reference_image_points = np.array(matches['points_1'])
-                current_world_points = np.array(matches['points_2'])
-                projected_world_points = np.array(matches['projected_points_2'])
-            else:
-                matches = data_association_2Dto3D(image_points, self.get_map(), self.__camera)
-                reference_image_points = np.array(matches['points_1'])
-                current_world_points = np.array(matches['points_2'])
-                projected_world_points = np.array(matches['projected_points_2'])
+            matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
+            reference_image_points = np.array(matches['points_1'])
+            current_world_points = np.array(matches['points_2'])
+            projected_world_points = np.array(matches['projected_points_2'])
 
             if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
@@ -180,7 +169,7 @@ class VisualOdometry:
                 ax[2].grid()
                 ax[2].set_title('Reference Image Points and Projected World Points')
 
-                fig.suptitle(f'Frame: {frame_index}, Iteration: {icp_iteration}, Phase: {1 if phase_1 else 2}')
+                fig.suptitle(f'Frame: {frame_index}, Iteration: {icp_iteration}')
 
                 plt.savefig(f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots.png')
                 plt.close(fig)
@@ -200,6 +189,8 @@ class VisualOdometry:
             
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
+            transforms['T'].append(w_T_c0)
+            transforms['error'].append(error)
             error_prev = error
 
             if computation_done and error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
@@ -210,8 +201,7 @@ class VisualOdometry:
             if (dumping_factor/2) > self.__min_dumping_factor and (stuck_counter > limit or (stuck_counter == 0 and flickering_counter == 0)): dumping_factor /= 2
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
 
-            print(f'Frame: {frame_index}, Iteration: {icp_iteration}, Phase: {1 if phase_1 else 2}')
-            print(f'Num of iterations: {icp_iteration_1} - {icp_iteration_2}')
+            print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
             print(f'Num of reference image points: {len(reference_image_points)}')
             print(f'Num of current world points: {len(current_world_points)}')
             print(f'Num of projected world points: {len(projected_world_points)}')
@@ -226,10 +216,21 @@ class VisualOdometry:
             print(f'Flickering counter: {flickering_counter}')
             print('-----------------------------------\n')
 
-            if phase_1 and computation_done and error < 1.5: phase_1 = False
-            if not phase_1 and computation_done and error < 1: stop = True
+            if computation_done and error < 1.5: stop = True
 
-        return w_T_c0, results
+        best_error = np.inf
+        best_transform = None
+        for i in range(len(transforms['T'])):
+            if transforms['error'][i] < best_error:
+                best_error = transforms['error'][i]
+                best_transform = transforms['T'][i]
+        w_T_c0 = best_transform
+        self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
+
+        print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
+        print('##################################\n')
+
+        return w_T_c0
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
