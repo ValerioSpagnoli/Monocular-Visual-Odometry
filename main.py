@@ -3,6 +3,7 @@ from src.Data import Data
 from src.VisualOdometry import VisualOdometry
 from src.utils import *
 from src.data_association import *
+from src.visualization_utils import *
 import numpy as np
 import plotly.graph_objects as go   
 import matplotlib.pyplot as plt
@@ -12,7 +13,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 45
+final_frame = 40
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
@@ -28,66 +29,31 @@ end = time.time()
 print(f'Time elapsed: {end-start} [s] - {(end-start)/60} [min]')
 print(f'Mean time per frame: {mean_time_per_frame} [s]')
 
-# | Plot trajectory in 3D
-estimated_trajectory = vo.get_trajectory()
-gt_trajectory = vo.get_data().get_trajectory_data()
 
 C = vo.get_camera().get_camera_transform()
- 
-estimated_trajectory_in_world = [] 
-for i in range(len(estimated_trajectory)):
-    pose = estimated_trajectory[i]
-    pose_in_world = C @ pose
-    estimated_trajectory_in_world.append(pose_in_world)
 
-estimated_positions = []
-estimated_positions_in_world = [] 
-for i in range(len(estimated_trajectory)):
-    estimated_positions.append(estimated_trajectory[i][:3, 3])
-    estimated_positions_in_world.append(estimated_trajectory_in_world[i][:3, 3])
+estimated_trajectory = vo.get_trajectory()
+gt_trajectory = vo.get_data().get_trajectory_data_poses()
 
-gt_poses = []
-gt_positions = []
-initial_frame_pose = np.array([gt_trajectory[initial_frame][0], gt_trajectory[initial_frame][1], 0, 0, 0, gt_trajectory[initial_frame][2]])
-for i in range(0, 120):
-    pose = np.array([gt_trajectory[i][0], gt_trajectory[i][1], 0, 0, 0, gt_trajectory[i][2]]) - initial_frame_pose
-    gt_poses.append(pose)
-    gt_positions.append(np.array([pose[0], pose[1], pose[2]]))
+estimated_world_points = vo.get_map()['position']
+gt_world_points = vo.get_data().get_world_data()['position']
+matches = data_association_on_appearance(vo.get_map(), vo.get_data().get_world_data())
+gt_world_points_matched = matches['points_2']
 
-fig = go.Figure()
+print('Number of world points: ', len(estimated_world_points))
+
 scale = 0.208
-gt_x_coords = [position[0] for position in gt_positions]
-gt_y_coords = [position[1] for position in gt_positions]
-gt_z_coords = [position[2] for position in gt_positions]
-fig.add_trace(go.Scatter3d(x=gt_x_coords, y=gt_y_coords, z=gt_z_coords, mode='lines', name='GT trajectory', line=dict(color='green')))
 
-estimated_x_coords = [position[0]*scale for position in estimated_positions]
-estimated_y_coords = [position[1]*scale for position in estimated_positions]
-estimated_z_coords = [position[2]*scale for position in estimated_positions]
-fig.add_trace(go.Scatter3d(x=estimated_x_coords, y=estimated_y_coords, z=estimated_z_coords, mode='lines', name='Estimated trajectory', line=dict(color='red')))
-
-estimated_x_coords_in_world = [position[0]*scale for position in estimated_positions_in_world]
-estimated_y_coords_in_world = [position[1]*scale for position in estimated_positions_in_world]
-estimated_z_coords_in_world = [position[2]*scale for position in estimated_positions_in_world]
-fig.add_trace(go.Scatter3d(x=estimated_x_coords_in_world, y=estimated_y_coords_in_world, z=estimated_z_coords_in_world, mode='lines', name='Estimated trajectory in world frame', line=dict(color='blue')))
-
-gt_x_coords = [gt_positions[final_frame-1][0]]
-gt_y_coords = [gt_positions[final_frame-1][1]]
-gt_z_coords = [gt_positions[final_frame-1][2]]
-fig.add_trace(go.Scatter3d(x=gt_x_coords, y=gt_y_coords, z=gt_z_coords, mode='markers', name='GT point in final frame', marker=dict(size=2, color='red')))
-
-fig.update_layout(scene=dict(aspectmode='data'))
-fig.show()
-
-
-# | Plot world points in 3D
-world_points = vo.get_map()['position']
-print('Number of world points: ', len(world_points))
-
-x_coords = [point[0] for point in world_points]
-y_coords = [point[1] for point in world_points]
-z_coords = [point[2] for point in world_points]
 
 fig = go.Figure()
-fig.add_trace(go.Scatter3d(x=x_coords, y=y_coords, z=z_coords, mode='markers', marker=dict(size=2)))
+
+plot_trajectory(fig, estimated_trajectory, scale=scale, name='Estimated trajectory', color='red', width=4)
+plot_trajectory(fig, estimated_trajectory, C=C, scale=scale, name='Estimated trajectory in world', color='blue', width=4)
+plot_trajectory(fig, gt_trajectory, name='Ground Truth trajectory', color='green', width=4)
+plot_point(fig, gt_trajectory[final_frame-1], pose=True, name='Final GT pose', color='red', size=3)
+plot_points(fig, estimated_world_points, pose=False, C=C, name='Map in world', scale=scale, color='orange', size=2)
+plot_points(fig, gt_world_points, pose=False, name='Ground Truth map', color='green', size=2)
+plot_points(fig, gt_world_points_matched, pose=False, name='Ground Truth map matched', color='blue', size=2)
+ 
+fig.update_layout(scene=dict(aspectmode='data'))
 fig.show()

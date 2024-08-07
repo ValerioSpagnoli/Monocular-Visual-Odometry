@@ -1,4 +1,6 @@
 import os
+import numpy as np
+from src.utils import *
 
 class Data:
     def __init__(self) :
@@ -82,6 +84,14 @@ class Data:
         
     def get_trajectory_data(self):
         return self.__trajectory_data
+    
+    def get_trajectory_data_poses(self):
+        gt_trajectory = self.__trajectory_data  
+        gt_poses = []
+        for i in range(0, len(gt_trajectory)):
+            gt_pose = v2T([gt_trajectory[i][0], gt_trajectory[i][1], 0, 0, 0, gt_trajectory[i][2]])
+            gt_poses.append(gt_pose)
+        return gt_poses
     
     def get_world_data(self):
         return self.__world_data

@@ -63,7 +63,6 @@ class VisualOdometry:
 
         return points_3D.T
 
-
     def initialize(self, initial_frame=0):
         measurement_0 = self.__data.get_measurements_data_points(initial_frame)
         measurement_1 = self.__data.get_measurements_data_points(initial_frame+1)
