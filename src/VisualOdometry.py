@@ -111,7 +111,10 @@ class VisualOdometry:
         next_measurement = self.__data.get_measurements_data_points(index+1)
         
         #** Projective ICP 
-        w_T_c1 = self.projective_ICP(next_measurement, index)
+        w_T_c1, is_valid = self.projective_ICP(next_measurement, index)
+        if not is_valid: 
+            self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
+            return
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
@@ -126,7 +129,7 @@ class VisualOdometry:
 
     def projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
-   
+        
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
         
@@ -230,17 +233,20 @@ class VisualOdometry:
 
         max_error_index = np.argmax(transforms['error'])
         min_error_index = np.argmin(transforms['error'])
-        w_T_c0 = transforms['T'][min_error_index]
-
-        self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
-
         print(f'Frame index: {frame_index} - Min error: {transforms["error"][min_error_index]} (index: {min_error_index}). Max error: {transforms["error"][max_error_index]} (index: {max_error_index})\n\n')
-
-        return w_T_c0
+        
+        T = transforms['T'][min_error_index]
+        is_valid = True
+        if transforms['error'][min_error_index] > 30: 
+            T = self.get_current_pose()
+            is_valid = False
+        self.__camera.set_c_T_w(np.linalg.inv(T))
+    
+        return T, is_valid
 
     def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
-        if (len(current_world_points) == 0): return w_T_c0, None, False
+        if (len(current_world_points) == 0): return w_T_c0, {'num_inliers': 0, 'error': np.Inf, 'kernel_threshold': kernel_threshold}, False
 
         H, b, num_inliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
         results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
@@ -354,7 +360,3 @@ class VisualOdometry:
     def get_map(self): return self.__map
     def get_data(self): return self.__data
     def get_camera(self): return self.__camera
-    
-    
-
-    
