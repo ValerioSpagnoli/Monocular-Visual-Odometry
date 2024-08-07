@@ -13,7 +13,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 45
+final_frame = 50
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
@@ -107,7 +107,7 @@ plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated
 plot_points(fig, estimated_world_points_in_world, name='Map in world', mode='markers', color='orange', size=2)
 plot_points(fig, gt_world_points, name='Ground Truth map', mode='markers', color='green', size=2)
  
-plot_matches(fig, estimated_world_points_in_world_matched, gt_world_points_matched, name='Map matches', color='blue', width=2)
+plot_matches(fig, estimated_world_points_in_world_matched, gt_world_points_matched, name='Map matches', color='violet', width=2)
 
 fig.update_layout(scene=dict(aspectmode='data'))
 fig.show()

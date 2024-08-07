@@ -8,6 +8,7 @@ import numpy as np
 import cv2
 import os
 import matplotlib.pyplot as plt
+import time
 
 class VisualOdometry:
     def __init__(self, kernel_threshold=1500, dumping_factor=1000, min_inliners=12, num_iterations=150):
@@ -18,8 +19,8 @@ class VisualOdometry:
         self.__max_kernel_threshold = 1e5
 
         self.__dumping_factor = dumping_factor
-        self.__min_dumping_factor = 100
-        self.__max_dumping_factor = 1e6
+        self.__min_dumping_factor = 1e3
+        self.__max_dumping_factor = 1e7
 
         self.__min_inliners = min_inliners
         self.__num_iterations = num_iterations
@@ -60,17 +61,18 @@ class VisualOdometry:
         #** Triangulate points
         points_4D = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
 
-        points_3D_local = (points_4D[:3] / points_4D[3]).T
+        points_3D = (points_4D[:3] / points_4D[3]).T
 
-        points_3D_norms = np.linalg.norm(points_3D_local, axis=1)
-        points_3D_local_mask = points_3D_norms < 30
-        points_3D_local_filtered = points_3D_local[points_3D_local_mask]
-        points_4D_local = np.hstack((points_3D_local_filtered, np.ones((points_3D_local_filtered.shape[0], 1))))
+        points_3D_norms = np.linalg.norm(points_3D, axis=1)
+        mask = points_3D_norms < 30
     
-        points_4D = w_T_c0 @ points_4D_local.T
+        points_3D_filtered = points_3D[mask]
+        points_4D = np.hstack((points_3D_filtered, np.ones((points_3D_filtered.shape[0], 1))))
+    
+        points_4D = w_T_c0 @ points_4D.T
         points_3D = points_4D[:3] / points_4D[3]
 
-        return points_3D.T, points_3D_local_mask
+        return points_3D.T, mask
 
     def initialize(self, initial_frame=0):
         measurement_0 = self.__data.get_measurements_data_points(initial_frame)
@@ -146,12 +148,12 @@ class VisualOdometry:
         while not stop:
             if icp_iteration == self.__num_iterations: break
             icp_iteration += 1
-
+            
             matches = data_association_on_appearance(image_points, self.get_map(), projection=2, camera=self.__camera)
             reference_image_points = np.array(matches['points_1'])
             current_world_points = np.array(matches['points_2'])
             projected_world_points = np.array(matches['projected_points_2'])
-
+            
             if False:
                 projected_world_points = self.__camera.project_points(current_world_points)
 
@@ -183,9 +185,8 @@ class VisualOdometry:
                 plt.savefig(f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots.png')
                 plt.close(fig)
 
-
             w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
-            
+
             num_inliers = results['num_inliers']
             error = results['error']    
             kernel_threshold = kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else results['kernel_threshold']
@@ -225,19 +226,15 @@ class VisualOdometry:
             print(f'Flickering counter: {flickering_counter}')
             print('-----------------------------------\n')
 
-            if computation_done and error < 1.5: stop = True
+            if computation_done and error < 0.5: stop = True
 
-        best_error = np.inf
-        best_transform = None
-        for i in range(len(transforms['T'])):
-            if transforms['error'][i] < best_error:
-                best_error = transforms['error'][i]
-                best_transform = transforms['T'][i]
-        w_T_c0 = best_transform
+        max_error_index = np.argmax(transforms['error'])
+        min_error_index = np.argmin(transforms['error'])
+        w_T_c0 = transforms['T'][min_error_index]
+
         self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-        print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
-        print('##################################\n')
+        print(f'Frame index: {frame_index} - Min error: {transforms["error"][min_error_index]} (index: {min_error_index}). Max error: {transforms["error"][max_error_index]} (index: {max_error_index})\n\n')
 
         return w_T_c0
 
@@ -248,7 +245,7 @@ class VisualOdometry:
         H, b, num_inliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
         results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
 
-        if num_inliers < self.__min_inliners: 
+        if num_inliers < self.__min_inliners and kernel_threshold < self.__max_kernel_threshold: 
             kernel_threshold += 50
             results['kernel_threshold'] = kernel_threshold
             return w_T_c0, results, False
@@ -270,6 +267,8 @@ class VisualOdometry:
         chi_inliers = []
         errors = []
         jacobians = []
+
+        print()
 
         for i in range(len(reference_image_points)):
             reference_image_point = reference_image_points[i]
@@ -343,6 +342,9 @@ class VisualOdometry:
             if appearance not in self.__map['appearance']:
                 self.__map['position'].append(position)
                 self.__map['appearance'].append(appearance)
+            else:
+                index = self.__map['appearance'].index(appearance)
+                self.__map['position'][index] = position
 
     def __set_initial_pose(self, pose): self.__initial_pose = pose
     def set_current_pose(self, pose): self.__current_pose = pose

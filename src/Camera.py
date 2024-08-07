@@ -115,34 +115,3 @@ class Camera:
             is_inside, image_point = self.project_point(world_point)
             if is_inside: image_points.append(image_point)
         return image_points
-    
-    def project_world_point(self, world_point, pose):
-        #* c_T_w:        world in camera pose 
-        #* world_point:  3D point in world coordinates 
-        #* world_point_in_camera_frame: 3D point in world coordinates but in current camera frame pose
-        #* camera_point: 3D point in current camera coordinates
-        #* image_point:  2D point in image coordinates
-
-        #* Projection: camera_point = c_T_w * world_point
-        #*             image_point  = camera_matrix * camera_point
-
-        world_point_hom = np.append(world_point, 1)
-        world_point_in_camera_frame = np.linalg.inv(pose) @ world_point_hom
-        camera_point_hom = np.linalg.inv(self.get_camera_transform()) @ world_point_in_camera_frame
-        camera_point = camera_point_hom[:3] / camera_point_hom[3]
-        
-        image_point_hom = self.get_camera_matrix() @ camera_point   
-        image_point = image_point_hom[:2] / image_point_hom[2]
-
-        #* point is behind the camera
-        #if camera_point[2] <= 0: return False, None
-
-        #* point is outside the camera range
-        if camera_point[2] <= self.get_camera_range()[0] or camera_point[2] >= self.get_camera_range()[1]: return False, None
-
-        #* point is outside the camera plane
-        if image_point[0] < 0 or image_point[0] >= self.get_camera_resolution()[0] or \
-            image_point[1] < 0 or image_point[1] >= self.get_camera_resolution()[1]: 
-            return False, None
-
-        return True, image_point
