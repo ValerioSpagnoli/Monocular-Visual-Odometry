@@ -2,6 +2,7 @@ from src.Camera import Camera
 from src.Data import Data
 from src.data_association import *
 from src.utils import *
+from src.visualization_utils import *
 
 import numpy as np
 import cv2
@@ -58,10 +59,18 @@ class VisualOdometry:
 
         #** Triangulate points
         points_4D = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
-        points_4D = w_T_c0 @ points_4D
+
+        points_3D_local = (points_4D[:3] / points_4D[3]).T
+
+        points_3D_norms = np.linalg.norm(points_3D_local, axis=1)
+        points_3D_local_mask = points_3D_norms < 30
+        points_3D_local_filtered = points_3D_local[points_3D_local_mask]
+        points_4D_local = np.hstack((points_3D_local_filtered, np.ones((points_3D_local_filtered.shape[0], 1))))
+    
+        points_4D = w_T_c0 @ points_4D_local.T
         points_3D = points_4D[:3] / points_4D[3]
 
-        return points_3D.T
+        return points_3D.T, points_3D_local_mask
 
     def initialize(self, initial_frame=0):
         measurement_0 = self.__data.get_measurements_data_points(initial_frame)
@@ -70,6 +79,7 @@ class VisualOdometry:
         matches = data_association_on_appearance(measurement_0, measurement_1)
         points_0 = np.array(matches['points_1'])
         points_1 = np.array(matches['points_2'])
+        appearances = np.array(matches['appearance'])
 
         w_T_c0 = np.eye(4)
         self.__set_initial_pose(w_T_c0)
@@ -83,10 +93,10 @@ class VisualOdometry:
         w_T_1 = w_T_c0 @ c0_T_c1
 
         #** Triangulate points
-        points_3D = self.triangulate_points(points_0, points_1, w_T_c0, w_T_1)
+        points_3D, mask = self.triangulate_points(points_0, points_1, w_T_c0, w_T_1)
         
         #** Update the state
-        map = {'position':points_3D, 'appearance':matches['appearance']}
+        map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_1, map)
 
     def update(self, index):
@@ -100,21 +110,22 @@ class VisualOdometry:
         
         #** Projective ICP 
         w_T_c1 = self.projective_ICP(next_measurement, index)
+        print(w_T_c1)
         
         #** Triangulate points
         matches = data_association_on_appearance(current_measurement, next_measurement)
         points_0 = np.array(matches['points_1'])
         points_1 = np.array(matches['points_2'])
-        points_3D = self.triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1)
+        appearances = np.array(matches['appearance'])
+        points_3D, mask = self.triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1)
 
         #** Update the state
-        map = {'position':points_3D, 'appearance':matches['appearance']}
+        map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_c1, map)
 
     def projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
-        w_T_c0_ = w_T_c0.copy()
-
+   
         kernel_threshold = self.__kernel_threshold
         dumping_factor = self.__dumping_factor
         
@@ -226,8 +237,8 @@ class VisualOdometry:
         w_T_c0 = best_transform
         self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
 
-        print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
-        print('##################################\n')
+        # print(f'Best transformation error: {best_error} (index: {transforms["error"].index(best_error)})')
+        # print('##################################\n')
 
         return w_T_c0
 
@@ -248,7 +259,8 @@ class VisualOdometry:
             results['kernel_threshold'] = kernel_threshold
 
         H += np.eye(6) * dumping_factor
-        dx = np.linalg.solve(H, -b)
+        # dx = np.linalg.solve(H, -b)
+        dx = np.linalg.lstsq(H, -b, rcond=None)[0]
         w_T_c1 = v2T(dx) @ w_T_c0
 
         return w_T_c1, results, True
@@ -286,7 +298,7 @@ class VisualOdometry:
             jacobian = jacobians[i]
             H += jacobian.T @ jacobian 
             b += jacobian.T @ error
-
+            
         num_inliers = len(errors)
         error = np.mean(chi_inliers) if num_inliers > 0 else np.inf 
 
@@ -316,13 +328,14 @@ class VisualOdometry:
         J = J_proj @ self.__camera.get_camera_matrix() @ J_icp
 
         return e, J
-
-
+    
     def __update_state(self, pose, map):
         self.__add_to_trajectory(pose)
         self.__add_to_global_map(map)
         self.set_current_pose(pose)
         self.__camera.set_c_T_w(np.linalg.inv(pose))
+
+        print(len(self.get_map()['position']))
 
     def __add_to_trajectory(self, pose):
         self.__trajectory.append(pose)

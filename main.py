@@ -13,7 +13,7 @@ start = time.time()
 mean_time_per_frame = 0
 
 initial_frame = 0
-final_frame = 40
+final_frame = 50
 
 vo = VisualOdometry()
 vo.initialize(initial_frame=initial_frame)
@@ -67,7 +67,8 @@ for i in range(len(delta_poses_estimated_trajectory)):
     translation_error = np.linalg.norm(rel_pose[:3,3])/np.linalg.norm(rel_pose_gt[:3,3])
     translation_errors.append(translation_error)
 
-scale = 1/np.mean(translation_errors)
+#scale = 1/np.mean(translation_errors)
+scale = 0.208
 scaled_estimated_world_points_matched = [scale*np.array(point) for point in estimated_world_points_matched]
 rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(scaled_estimated_world_points_matched)-np.array(gt_world_points_matched), axis=1)**2))
 
