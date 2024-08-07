@@ -17,18 +17,12 @@ def Rz(theta):
                      [0,              0,             1]])
 
 def euler2R(euler):
-    # return cv2.Rodrigues(euler)[0]
     Rot_x = Rx(euler[0])
     Rot_y = Ry(euler[1])
     Rot_z = Rz(euler[2])
     return Rot_x @ Rot_y @ Rot_z 
 
 def R2euler(R):
-    # rotation_vector = cv2.Rodrigues(R)[0]
-    # roll = rotation_vector[0]
-    # pitch = rotation_vector[1]
-    # yaw = rotation_vector[2]
-
     s = np.linalg.norm(np.diag(R))
     singular = s < 1e-6
     if singular:
@@ -66,3 +60,10 @@ def skew(w):
     return np.array([[    0, -w[2],  w[1]], 
                      [ w[2],     0, -w[0]], 
                      [-w[1],  w[0],    0]])
+
+def trajectory2world(trajectory, C):
+    trajectory_world = []
+    for i in range(len(trajectory)):
+        pose = C @ trajectory[i]
+        trajectory_world.append(pose)
+    return trajectory_world

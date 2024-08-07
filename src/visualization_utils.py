@@ -5,10 +5,11 @@ from src.utils import *
 
 
 def plot_trajectory(fig, trajectory, C=np.eye(4), scale=1, name='Trajectory', color='blue', width=4):     
+    trajectory = trajectory2world(trajectory, C)
+
     trajectory_positions = []
     for i in range(len(trajectory)):
-        pose = C @ trajectory[i]
-        position = pose[:3, 3]
+        position = trajectory[i][:3, 3]
         trajectory_positions.append(position)
 
     x_coords = [position[0]*scale for position in trajectory_positions]
