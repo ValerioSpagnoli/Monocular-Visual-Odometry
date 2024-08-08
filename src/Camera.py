@@ -81,6 +81,19 @@ class Camera:
         return self.__c_T_w
     
     def project_point(self, world_point):
+        """
+        Projects a 3D point from world coordinates to image coordinates.
+
+        Args:
+            world_point (numpy.ndarray): 3D point in initial camera coordinates (i.e. the camera coordinates of the first frame).
+
+        Returns:
+            tuple: A tuple containing a boolean value indicating if the point is successfully projected and the projected image point coordinates.
+                   - If the point is successfully projected, the boolean value is True and the image point coordinates are returned.
+                   - If the point is not successfully projected (e.g. point is behind the camera, outside the camera range, or outside the camera plane),
+                     the boolean value is False and None is returned.
+        """
+
         #* c_T_w:        world in camera pose 
         #* world_point:  3D point in initial camera coordinates (i.e. the camera coordinates of the first frame)
         #* camera_point: 3D point in current camera coordinates
@@ -109,6 +122,15 @@ class Camera:
         return True, image_point
     
     def project_points(self, world_points):
+        """
+        Projects a list of world points onto the image plane.
+
+        Args:
+            world_points (list): A list of world points to be projected.
+
+        Returns:
+            list: A list of image points corresponding to the projected world points.
+        """
         image_points = []
         for world_point in world_points:
             is_inside, image_point = self.project_point(world_point)

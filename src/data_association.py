@@ -1,6 +1,22 @@
 import numpy as np
 
 def data_association_on_appearance(set_1, set_2, projection=0, camera=None):
+    """
+    Performs data association based on appearance between two sets of data points.
+    Args:
+        set_1 (dict): First set of data points containing 'position' and 'appearance' information.
+        set_2 (dict): Second set of data points containing 'position' and 'appearance' information.
+        projection (int, optional): If project the points to the camera plane. 0: No projection, 1: Project set_1, 2: Project set_2. Defaults to 0.
+        camera (object, optional): Camera object used for projection. Defaults to None.
+    Returns:
+        dict: Dictionary containing matched data points based on appearance.
+            - If projection is 1: {'points_1': [], 'projected_points_1': [], 'points_2': [], 'appearance': []}
+            - If projection is 2: {'points_1': [], 'points_2': [], 'projected_points_2': [], 'appearance': []}
+            - If projection is not 1 or 2: {'points_1': [], 'points_2': [], 'appearance': []}
+    """
+
+    assert(projection in [0, 1, 2], "Projection should be 0, 1 or 2.")
+
     points_1 = set_1['position']
     appearance_1 = set_1['appearance']
 
@@ -41,36 +57,6 @@ def data_association_on_appearance(set_1, set_2, projection=0, camera=None):
 
     return matches
 
-def data_association_on_distance(set_1, set_2):
-    points_1_position = set_1['position']    
-    points_1_appearance = set_1['appearance']
-    
-    points_2_position = set_2['position']
-    points_2_appearance = set_2['appearance']
-
-    matches = {'points_1':[], 'points_2':[]}
-
-    mean_distance = 0
-    mean_appereance_distance = 0
-    for i in range(len(points_1_position)):
-        min_distance = np.inf
-        min_index = -1
-
-        for j in range(len(points_2_position)):
-            distance = np.linalg.norm(np.array(points_1_position[i])-np.array(points_2_position[j]))
-            if distance < min_distance:
-                min_distance = distance
-                min_index = j
-
-        matches['points_1'].append(points_1_position[i])
-        matches['points_2'].append(points_2_position[min_index])
-        mean_distance += min_distance
-        mean_appereance_distance += np.linalg.norm(np.array(points_1_appearance[i])-np.array(points_2_appearance[min_index]))
-
-    mean_distance /= len(points_1_position)
-    mean_appereance_distance /= len(points_1_position)
-
-    return matches, mean_distance, mean_appereance_distance
 
 def data_association_2Dto3D(image_points, world_points, camera):
     matches = data_association_on_appearance(image_points, world_points, projection=2, camera=camera)

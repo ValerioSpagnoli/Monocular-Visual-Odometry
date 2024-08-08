@@ -44,7 +44,7 @@ class Data:
 
 
     def __load_measurements_data(self):
-        measurements = {'gt_pose':[], 'image_points':[]}
+        measurements = []
 
         for i in range(121):
             measurement_file_name = f'meas-{i:05d}.dat'
@@ -57,12 +57,7 @@ class Data:
                 
                 for line in lines:
 
-                    if line.startswith('gt_pose'):
-                        tokens = line.split()
-                        gt_pose = [float(x) for x in tokens[1:]]
-                        measurements['gt_pose'].append(gt_pose)
-                        
-                    elif line.startswith('point'):
+                    if line.startswith('point'):
                         tokens = line.split()
                         current_point_id = int(tokens[1])
                         actual_point_id = int(tokens[2])
@@ -74,16 +69,28 @@ class Data:
                         image_points['position'].append(position)
                         image_points['appearance'].append(appearance)
 
-                measurements['image_points'].append(image_points)
+                measurements.append(image_points)
 
             except: print(f"Error: Could not find the {measurement_file_name} file")
                 
         return measurements
         
     def get_trajectory_data(self):
+        """
+        Returns the trajectory data.
+
+        Returns:
+            list: A list of ground truth trajectory data positions.
+        """
         return self.__trajectory_data
     
     def get_trajectory_data_poses(self):
+        """
+        Returns the ground truth poses of the trajectory data.
+
+        Returns:
+            list: A list of ground truth trajectory data poses.
+        """
         gt_trajectory = self.__trajectory_data  
         gt_poses = []
         for i in range(0, len(gt_trajectory)):
@@ -92,10 +99,28 @@ class Data:
         return gt_poses
     
     def get_world_data(self):
+        """
+        Returns the world data.
+
+        Returns:
+        - dict: A dictionary containing the world data.
+            - 'position': A list of world data positions.
+            - 'appearance': A list of world data appearances.
+        """
         return self.__world_data
     
-    def get_measurements_data(self):
-        return self.__measurements_data
-    
-    def get_measurements_data_points(self, index):
-        return self.__measurements_data['image_points'][index]
+    def get_measurements_data(self, index):
+        """
+        Returns the measurements data at the specified index.
+
+        Parameters:
+        - index (int): The index of the measurements data to retrieve.
+
+        Returns:
+        - dict: A dictionary containing the measurements data.
+            - 'current_point_id': A list of current point IDs.
+            - 'actual_point_id': A list of actual point IDs.
+            - 'position': A list of positions.
+            - 'appearance': A list of appearances.
+        """
+        return self.__measurements_data[index]
