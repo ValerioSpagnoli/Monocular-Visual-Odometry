@@ -3,8 +3,7 @@ import numpy as np
 class Camera:
     def __init__(self):
         self.__camera_matrix, self.__camera_transform, self.__camera_range, self.__camera_resolution = self.__load_camera_data()
-        
-        self.__c_T_w = np.eye(4) # world in camera pose
+        self.__c_T_w = np.eye(4)
 
         
     def __load_camera_data(self):

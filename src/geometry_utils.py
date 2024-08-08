@@ -61,6 +61,32 @@ def skew(w):
                      [ w[2],     0, -w[0]], 
                      [-w[1],  w[0],    0]])
 
+def triangulate_points(points_0, points_1, w_T_c0, w_T_c1, K, threshold=30):
+
+    T = np.linalg.inv(w_T_c1) @ w_T_c0
+    R = T[:3, :3] 
+    t = T[:3, 3].reshape(-1, 1)   
+
+    #** Projection matrices
+    P_0 = K @ np.hstack((np.eye(3), np.zeros((3, 1))))
+    P_1 = K @ np.hstack((R, t))        
+
+    #** Triangulate points
+    points_4D = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
+
+    points_3D = (points_4D[:3] / points_4D[3]).T
+
+    points_3D_norms = np.linalg.norm(points_3D, axis=1)
+    mask = points_3D_norms < threshold
+
+    points_3D_filtered = points_3D[mask]
+    points_4D = np.hstack((points_3D_filtered, np.ones((points_3D_filtered.shape[0], 1))))
+
+    points_4D = w_T_c0 @ points_4D.T
+    points_3D = points_4D[:3] / points_4D[3]
+
+    return points_3D.T, mask
+
 def transform(poses, T=np.eye(4), scale=1, are_points=False):
     translated = []
     for i in range(len(poses)):

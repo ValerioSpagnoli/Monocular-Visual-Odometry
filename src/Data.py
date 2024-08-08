@@ -1,6 +1,4 @@
-import os
-import numpy as np
-from src.utils import *
+from src.geometry_utils import *
 
 class Data:
     def __init__(self) :

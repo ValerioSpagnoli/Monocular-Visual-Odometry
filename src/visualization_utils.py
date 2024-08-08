@@ -1,7 +1,8 @@
+from src.geometry_utils import *
+
 import plotly.graph_objects as go   
 import matplotlib.pyplot as plt
 import numpy as np
-from src.utils import *
 
 
 def plot_points(fig, points, name='points', mode='markers', color='blue', size=2, width=2):     
