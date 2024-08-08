@@ -61,7 +61,7 @@ def skew(w):
                      [ w[2],     0, -w[0]], 
                      [-w[1],  w[0],    0]])
 
-def translate(poses, T=np.eye(4), scale=1, are_points=False):
+def transform(poses, T=np.eye(4), scale=1, are_points=False):
     translated = []
     for i in range(len(poses)):
         pose = poses[i]

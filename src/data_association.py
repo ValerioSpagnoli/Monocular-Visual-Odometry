@@ -80,7 +80,7 @@ def data_association_2Dto3D(image_points, world_points, camera):
     projected_world_points_position = matches['projected_points_2']
     appearance = matches['appearance']
     
-    matches = {'points_1':[], 'points_2':[], 'projected_points_2':[], 'appearance':[], 'distance':[]}
+    matches = {'points_1':[], 'points_2':[], 'projected_points_2':[], 'appearance':[]}
     matched_image_points = []
 
     for i in range(len(image_points_position)):
@@ -104,6 +104,5 @@ def data_association_2Dto3D(image_points, world_points, camera):
         matches['points_2'].append(world_points_position[j])
         matches['projected_points_2'].append(projected_world_points_position[j])
         matches['appearance'].append(appearance[i])
-        matches['distance'].append(np.linalg.norm(image_points_position[i]-projected_world_points_position[j]))
 
     return matches

@@ -11,19 +11,27 @@ import matplotlib.pyplot as plt
 import time
 
 class VisualOdometry:
-    def __init__(self, kernel_threshold=1500, dumping_factor=1000, min_inliners=12, num_iterations=150):
+    def __init__(self, initial_frame=0, final_frame=120, verbose=False, save_plots=False, save_plots_indices=[]):
+
+        self.__initial_frame = initial_frame
+        self.__final_frame = final_frame
+        self.__verbose = verbose    
+
+        #** Save plots
+        self.__save_plots = save_plots
+        self.__save_plots_indices = save_plots_indices
 
         #** Projective ICP parameters
-        self.__kernel_threshold = kernel_threshold
+        self.__kernel_threshold = 1500
         self.__min_kernel_threshold = 200
         self.__max_kernel_threshold = 1e5
 
-        self.__dumping_factor = dumping_factor
+        self.__dumping_factor = 1000
         self.__min_dumping_factor = 1e3
         self.__max_dumping_factor = 1e7
 
-        self.__min_inliners = min_inliners
-        self.__num_iterations = num_iterations
+        self.__min_inliners = 12
+        self.__num_iterations = 150
 
         #** Camera and Data
         self.__camera = Camera()
@@ -38,15 +46,13 @@ class VisualOdometry:
         #* Appearance: 1x10 vectory
         self.__map = {'position':[], 'appearance':[]}
 
-
-        #** Initial pose of the camera in global coordinates 
-        self.__initial_pose = np.eye(4)
-
         #** Current pose of the camera in global coordinates
         self.__current_pose = np.eye(4)
-
     
-    def triangulate_points(self, points_0, points_1, w_T_c0, w_T_c1):
+
+    #| --------------- Private methods --------------- |#
+
+    def __triangulate_points(self, points_0, points_1, w_T_c0, w_T_c1):
 
         K = self.__camera.get_camera_matrix()
 
@@ -74,9 +80,9 @@ class VisualOdometry:
 
         return points_3D.T, mask
 
-    def initialize(self, initial_frame=0):
-        measurement_0 = self.__data.get_measurements_data_points(initial_frame)
-        measurement_1 = self.__data.get_measurements_data_points(initial_frame+1)
+    def __initialize(self):
+        measurement_0 = self.__data.get_measurements_data_points(self.__initial_frame)
+        measurement_1 = self.__data.get_measurements_data_points(self.__initial_frame+1)
  
         matches = data_association_on_appearance(measurement_0, measurement_1)
         points_0 = np.array(matches['points_1'])
@@ -84,7 +90,6 @@ class VisualOdometry:
         appearances = np.array(matches['appearance'])
 
         w_T_c0 = np.eye(4)
-        self.__set_initial_pose(w_T_c0)
         self.__update_state(w_T_c0, {'position':[], 'appearance':[]})
 
         #** Estimate the relative pose between the two frames
@@ -95,23 +100,23 @@ class VisualOdometry:
         w_T_1 = w_T_c0 @ c0_T_c1
 
         #** Triangulate points
-        points_3D, mask = self.triangulate_points(points_0, points_1, w_T_c0, w_T_1)
+        points_3D, mask = self.__triangulate_points(points_0, points_1, w_T_c0, w_T_1)
         
         #** Update the state
         map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_1, map)
 
-    def update(self, index):
-        if os.path.exists(f'outputs/frame_{index}'): os.system(f'rm -r outputs/frame_{index}')
-        os.makedirs(f'outputs/frame_{index}', exist_ok=True)
-        os.makedirs(f'outputs/frame_{index}/icp', exist_ok=True)
-        os.makedirs(f'outputs/frame_{index}/plots', exist_ok=True)
+    def __update(self, frame_index):
+        if os.path.exists(f'outputs/frame_{frame_index}'): os.system(f'rm -r outputs/frame_{frame_index}')
+        os.makedirs(f'outputs/frame_{frame_index}', exist_ok=True)
+        os.makedirs(f'outputs/frame_{frame_index}/icp', exist_ok=True)
+        os.makedirs(f'outputs/frame_{frame_index}/plots', exist_ok=True)
 
-        current_measurement = self.__data.get_measurements_data_points(index)
-        next_measurement = self.__data.get_measurements_data_points(index+1)
+        current_measurement = self.__data.get_measurements_data_points(frame_index)
+        next_measurement = self.__data.get_measurements_data_points(frame_index+1)
         
         #** Projective ICP 
-        w_T_c1, is_valid = self.projective_ICP(next_measurement, index)
+        w_T_c1, is_valid, iterations_results = self.__projective_ICP(next_measurement, frame_index)
         if not is_valid: 
             self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
             return
@@ -121,13 +126,38 @@ class VisualOdometry:
         points_0 = np.array(matches['points_1'])
         points_1 = np.array(matches['points_2'])
         appearances = np.array(matches['appearance'])
-        points_3D, mask = self.triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1)
+        points_3D, mask = self.__triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1)
 
         #** Update the state
         map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_c1, map)
 
-    def projective_ICP(self, image_points, frame_index):
+
+        min_error_index = np.argmin(iterations_results['error'])
+        max_error_index = np.argmax(iterations_results['error'])
+        icp_iteration = len(iterations_results['T'])
+        print(f'Frame: {frame_index}')
+        print(f'  - Num iterations:                   {icp_iteration}\n')
+        print(f'  - Error best iteration:             {np.round(iterations_results["error"][min_error_index], 5)} (index: {min_error_index})')
+        print(f'  - Error worst iteration:            {np.round(iterations_results["error"][max_error_index], 5)} (index: {max_error_index})')    
+        print(f'  - Mean error:                       {np.round(np.mean(iterations_results["error"]), 5)}\n')
+         
+        print(f'  - Num inliers best iteration:       {iterations_results["num_inliers"][min_error_index]}')
+        print(f'  - Num inliers worst iteration:      {iterations_results["num_inliers"][max_error_index]}')
+        print(f'  - Mean num inliers:                 {np.round(np.mean(iterations_results["num_inliers"]))}\n')
+ 
+        print(f'  - Kernel threshold best iteration:  {iterations_results["kernel_threshold"][min_error_index]}')
+        print(f'  - Kernel threshold worst iteration: {iterations_results["kernel_threshold"][max_error_index]}')
+        print(f'  - Mean kernel threshold:            {np.round(np.mean(iterations_results["kernel_threshold"]))}\n')
+         
+        print(f'  - Dumping factor best iteration:    {iterations_results["dumping_factor"][min_error_index]}')
+        print(f'  - Dumping factor worst iteration:   {iterations_results["dumping_factor"][max_error_index]}')
+        print(f'  - Mean dumping factor:              {np.round(np.mean(iterations_results["dumping_factor"]))}\n')
+
+        print(f'Applied transformation of index {min_error_index} to the camera')
+        print('================================================================\n')
+
+    def __projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
         
         kernel_threshold = self.__kernel_threshold
@@ -144,7 +174,7 @@ class VisualOdometry:
         stuck_counter = 0
         flickering_counter = 0
 
-        transforms = {'T':[], 'error':[]}
+        iterations_results = {'T':[], 'error':[], 'num_inliers':[], 'kernel_threshold':[], 'dumping_factor':[]}    
 
         stop = False
         icp_iteration = 0
@@ -157,38 +187,12 @@ class VisualOdometry:
             current_world_points = np.array(matches['points_2'])
             projected_world_points = np.array(matches['projected_points_2'])
             
-            if False:
+            if self.__save_plots and (len(self.__save_plots_indices) == 0 or frame_index in self.__save_plots_indices):
                 projected_world_points = self.__camera.project_points(current_world_points)
+                save_path = f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots'
+                plot_icp_frame(reference_image_points, projected_world_points, save_path, title=f'Frame: {frame_index}, Iteration: {icp_iteration}', set_1_title='Reference Image Points', set_2_title='Projected World Points')
 
-                fig, ax = plt.subplots(1, 3, figsize=(15, 5))
-                ax[0].imshow(np.ones((480, 640, 3)))
-                ax[0].scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
-                ax[0].set_xticks(np.arange(0, 640, 40))
-                ax[0].set_yticks(np.arange(0, 480, 40))
-                ax[0].grid()
-                ax[0].set_title('Reference Image Points')
-
-                ax[1].imshow(np.ones((480, 640, 3)))
-                ax[1].scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
-                ax[1].set_xticks(np.arange(0, 640, 40))
-                ax[1].set_yticks(np.arange(0, 480, 40))
-                ax[1].grid()
-                ax[1].set_title('Projected World Points')
-
-                ax[2].imshow(np.ones((480, 640, 3)))
-                ax[2].scatter([point[0] for point in reference_image_points], [point[1] for point in reference_image_points], color='green', marker='o')
-                ax[2].scatter([point[0] for point in projected_world_points], [point[1] for point in projected_world_points], color='red', marker='x')
-                ax[2].set_xticks(np.arange(0, 640, 40))
-                ax[2].set_yticks(np.arange(0, 480, 40))
-                ax[2].grid()
-                ax[2].set_title('Reference Image Points and Projected World Points')
-
-                fig.suptitle(f'Frame: {frame_index}, Iteration: {icp_iteration}')
-
-                plt.savefig(f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots.png')
-                plt.close(fig)
-
-            w_T_c1, results, computation_done = self.one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
+            w_T_c1, results, computation_done = self.__one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
 
             num_inliers = results['num_inliers']
             error = results['error']    
@@ -202,8 +206,11 @@ class VisualOdometry:
             
             w_T_c0 = w_T_c1
             self.__camera.set_c_T_w(np.linalg.inv(w_T_c0))
-            transforms['T'].append(w_T_c0)
-            transforms['error'].append(error)
+            iterations_results['T'].append(w_T_c0)
+            iterations_results['error'].append(error)
+            iterations_results['num_inliers'].append(num_inliers)
+            iterations_results['kernel_threshold'].append(kernel_threshold)
+            iterations_results['dumping_factor'].append(dumping_factor)
             error_prev = error
 
             if computation_done and error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
@@ -214,41 +221,33 @@ class VisualOdometry:
             if (dumping_factor/2) > self.__min_dumping_factor and (stuck_counter > limit or (stuck_counter == 0 and flickering_counter == 0)): dumping_factor /= 2
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
 
-            print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
-            print(f'Num of reference image points: {len(reference_image_points)}')
-            print(f'Num of current world points: {len(current_world_points)}')
-            print(f'Num of projected world points: {len(projected_world_points)}')
-            print(f'Num inliers: {num_inliers}')
-            print(f'Error: {error}')
-            print(f'Kernel threshold: {kernel_threshold}')
-            print(f'Dumping factor: {dumping_factor}')
-            print(f'Chi inliers slope: {error_slope}')
-            print(f'Chi inliers mean slope: {error_mean_slope}')
-            print(f'Chi inliers sigma slope: {error_sigma_slope}')
-            print(f'Stuck counter: {stuck_counter}')
-            print(f'Flickering counter: {flickering_counter}')
-            print('-----------------------------------\n')
+            if self.__verbose:
+                print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
+                print(f'  - Error:            {np.round(error, 5)}')
+                print(f'  - Num inliers:      {num_inliers}')
+                print(f'  - Kernel threshold: {kernel_threshold}')
+                print(f'  - Dumping factor:   {np.round(dumping_factor, 5)}')
+                print('------------------------------------------------------------\n')
 
             if computation_done and error < 0.5: stop = True
 
-        max_error_index = np.argmax(transforms['error'])
-        min_error_index = np.argmin(transforms['error'])
-        print(f'Frame index: {frame_index} - Min error: {transforms["error"][min_error_index]} (index: {min_error_index}). Max error: {transforms["error"][max_error_index]} (index: {max_error_index})\n\n')
-        
-        T = transforms['T'][min_error_index]
+        max_error_index = np.argmax(iterations_results['error'])
+        min_error_index = np.argmin(iterations_results['error'])
+
+        T = iterations_results['T'][min_error_index]
         is_valid = True
-        if transforms['error'][min_error_index] > 30: 
+        if iterations_results['error'][min_error_index] > 30: 
             T = self.get_current_pose()
             is_valid = False
         self.__camera.set_c_T_w(np.linalg.inv(T))
     
-        return T, is_valid
+        return T, is_valid, iterations_results
 
-    def one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
+    def __one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
         if (len(current_world_points) == 0): return w_T_c0, {'num_inliers': 0, 'error': np.Inf, 'kernel_threshold': kernel_threshold}, False
 
-        H, b, num_inliers, error = self.linearize(reference_image_points, current_world_points, kernel_threshold)
+        H, b, num_inliers, error = self.__linearize(reference_image_points, current_world_points, kernel_threshold)
         results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
 
         if num_inliers < self.__min_inliners and kernel_threshold < self.__max_kernel_threshold: 
@@ -266,7 +265,7 @@ class VisualOdometry:
 
         return w_T_c1, results, True
 
-    def linearize(self, reference_image_points, currrent_world_points, kernel_threshold):
+    def __linearize(self, reference_image_points, currrent_world_points, kernel_threshold):
         H = np.zeros((6, 6))
         b = np.zeros(6)
 
@@ -274,13 +273,11 @@ class VisualOdometry:
         errors = []
         jacobians = []
 
-        print()
-
         for i in range(len(reference_image_points)):
             reference_image_point = reference_image_points[i]
             current_world_point = currrent_world_points[i]
             
-            error, jacobian = self.error_and_jacobian(reference_image_point, current_world_point)
+            error, jacobian = self.__error_and_jacobian(reference_image_point, current_world_point)
             if error is None or jacobian is None: continue
                 
             chi = error.T @ error 
@@ -307,7 +304,7 @@ class VisualOdometry:
 
         return H, b, num_inliers, error
     
-    def error_and_jacobian(self, reference_image_point, current_world_point):
+    def __error_and_jacobian(self, reference_image_point, current_world_point):
 
         is_inside, projected_image_point = self.__camera.project_point(current_world_point)    
         if not is_inside: return None, None
@@ -335,7 +332,7 @@ class VisualOdometry:
     def __update_state(self, pose, map):
         self.__add_to_trajectory(pose)
         self.__add_to_global_map(map)
-        self.set_current_pose(pose)
+        self.__current_pose = pose
         self.__camera.set_c_T_w(np.linalg.inv(pose))
 
     def __add_to_trajectory(self, pose):
@@ -352,9 +349,118 @@ class VisualOdometry:
                 index = self.__map['appearance'].index(appearance)
                 self.__map['position'][index] = position
 
-    def __set_initial_pose(self, pose): self.__initial_pose = pose
-    def set_current_pose(self, pose): self.__current_pose = pose
-    def get_initial_pose(self): return self.__initial_pose
+
+
+
+    #| --------------- Public methods --------------- |#
+
+    def run(self):
+        start = time.time()
+        frame_times = []
+        for i in range(self.__initial_frame, self.__final_frame):
+            start_frame = time.time()
+
+            if i == self.__initial_frame: self.__initialize()
+            else: self.__update(i)
+
+            end_frame = time.time()
+            frame_times.append(end_frame-start_frame)
+        
+        end = time.time()
+        mean_time_per_frame = np.mean(frame_times)
+        total_time = end-start
+        
+        print(f'Mean time per frame: {mean_time_per_frame} [s]')
+        print(f'Total time:          {total_time} [s]\n')
+
+        return total_time, mean_time_per_frame
+
+    def evaluate(self):
+        gt_trajectory = self.get_data().get_trajectory_data_poses()
+        gt_world_points = self.get_data().get_world_data()
+
+        estimated_trajectory = self.get_trajectory()
+        estimated_world_points = self.get_map()
+
+        C = self.get_camera().get_camera_transform()
+        T = gt_trajectory[self.__initial_frame] @ Rt2T(R=C[:3,:3], t=np.zeros(3)) if self.__initial_frame > 0 else C
+
+        estimated_trajectory_in_world = transform(estimated_trajectory, T)
+        estimated_world_points_in_world = transform(estimated_world_points['position'], T, are_points=True)
+
+        delta_poses_estimated_trajectory = []
+        for i in range(len(estimated_trajectory_in_world)-1):
+            rel_pose = np.linalg.inv(estimated_trajectory_in_world[i]) @ estimated_trajectory_in_world[i+1]
+            delta_poses_estimated_trajectory.append(rel_pose)
+
+        delta_poses_gt_trajectory = []
+        for i in range(len(gt_trajectory)-1):
+            rel_pose = np.linalg.inv(gt_trajectory[i]) @ gt_trajectory[i+1]
+            delta_poses_gt_trajectory.append(rel_pose)
+
+        errors_T = []
+        for i in range(len(delta_poses_estimated_trajectory)):
+            error_T = np.linalg.inv(delta_poses_estimated_trajectory[i]) @ delta_poses_gt_trajectory[i]
+            errors_T.append(error_T)
+
+        rotation_errors = []
+        for i in range(len(errors_T)):
+            rotation_error = np.trace(np.eye(3)-errors_T[i][:3,:3])
+            rotation_errors.append(rotation_error)
+
+        translation_errors = []
+        for i in range(len(delta_poses_estimated_trajectory)):
+            rel_pose = delta_poses_estimated_trajectory[i]
+            rel_pose_gt = delta_poses_gt_trajectory[i]
+            translation_error = np.linalg.norm(rel_pose[:3,3])/np.linalg.norm(rel_pose_gt[:3,3])
+            translation_errors.append(translation_error)
+        
+        max_rotation_error = np.max(rotation_errors)
+        min_rotation_error = np.min(rotation_errors)
+        mean_rotation_error = np.mean(rotation_errors)
+
+        max_translation_error = np.max(translation_errors)
+        min_translation_error = np.min(translation_errors)
+        mean_translation_error = np.mean(translation_errors)
+
+        scale = 1/mean_translation_error
+
+        estimated_trajectory_in_world = transform(estimated_trajectory_in_world, scale=scale)
+        estimated_world_points_in_world = transform(estimated_world_points_in_world, scale=scale, are_points=True)
+        matches = data_association_on_appearance({'position':estimated_world_points_in_world, 'appearance':estimated_world_points['appearance']}, gt_world_points)
+        estimated_world_points_in_world_matched = matches['points_1']
+        gt_world_points_matched = matches['points_2']
+
+        rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(estimated_world_points_in_world_matched)-np.array(gt_world_points_matched), axis=1)**2))
+        num_world_points = len(estimated_world_points_in_world_matched)
+
+        print(f'Number of world points: {num_world_points}')
+        print(f'RMSE world map:         {rmse_world_map}\n')
+
+        print(f'Max rotation error:     {max_rotation_error}')
+        print(f'Min rotation error:     {min_rotation_error}')
+        print(f'Mean rotation error:    {mean_rotation_error}\n')
+        
+        print(f'Max translation error:  {max_translation_error}')
+        print(f'Min translation error:  {min_translation_error}')
+        print(f'Mean translation error: {mean_translation_error}')  
+        print(f'scale:                  {scale}')   
+
+        fig = go.Figure()
+        plot_points(fig, poses2positions([gt_trajectory[self.__initial_frame]]), name='Initial GT pose', mode='markers', color='deepskyblue', size=3)
+        plot_points(fig, poses2positions([gt_trajectory[self.__final_frame]]), name='Final GT pose', mode='markers', color='deepskyblue', size=3)
+
+        plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='lines', color='blue', width=3)
+        plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory', mode='lines', color='red', width=5)
+
+        plot_points(fig, estimated_world_points_in_world, name='Estimated map', mode='markers', color='orange', size=2)
+        plot_points(fig, gt_world_points['position'], name='Ground Truth map', mode='markers', color='green', size=2)
+        
+        plot_matches(fig, estimated_world_points_in_world_matched, gt_world_points_matched, name='Map matches', color='violet', width=2)
+
+        fig.update_layout(scene=dict(aspectmode='data'))
+        fig.show()
+
     def get_current_pose(self): return self.__current_pose
     def get_trajectory(self): return self.__trajectory
     def get_map(self): return self.__map
