@@ -42,7 +42,6 @@ class Data:
 
         return world_map
 
-
     def __load_measurements_data(self):
         measurements = []
 

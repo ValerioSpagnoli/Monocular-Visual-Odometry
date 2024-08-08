@@ -4,7 +4,6 @@ import plotly.graph_objects as go
 import matplotlib.pyplot as plt
 import numpy as np
 
-
 def plot_points(fig, points, name='points', mode='markers', color='blue', size=2, width=2):     
 
     x_coords = [position[0] for position in points]
