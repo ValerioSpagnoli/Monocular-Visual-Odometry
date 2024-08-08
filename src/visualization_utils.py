@@ -62,3 +62,43 @@ def plot_icp_frame(set_1, set_2, save_path, title='ICP Iteration', set_1_title='
     plt.savefig(f'{save_path}.png')
     plt.close(fig)
 
+def plot_icp_iterations_results(iterations_results, save_path):
+    T = iterations_results['T']
+    error = iterations_results['error']
+    num_inliers = iterations_results['num_inliers']
+    kernel_threshold = iterations_results['kernel_threshold']
+    dumping_factor = iterations_results['dumping_factor']
+
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
+
+    ax[0, 0].plot(error)
+    ax[0, 0].set_title('Error')
+    ax[0, 0].set_xlabel('Iteration')
+    ax[0, 0].set_ylabel('Error')
+    ax[0, 0].set_xticks(np.arange(0, len(error), 1 if len(error) < 10 else 5))
+    ax[0, 0].grid()
+
+    ax[0, 1].plot(num_inliers)
+    ax[0, 1].set_title('Number of Inliers')
+    ax[0, 1].set_xlabel('Iteration')
+    ax[0, 1].set_ylabel('Number of Inliers')
+    ax[0, 1].set_xticks(np.arange(0, len(num_inliers), 1 if len(num_inliers) < 10 else 5))
+    ax[0, 1].grid()
+
+    ax[1, 0].plot(kernel_threshold)
+    ax[1, 0].set_title('Kernel Threshold')
+    ax[1, 0].set_xlabel('Iteration')
+    ax[1, 0].set_ylabel('Kernel Threshold')
+    ax[1, 0].set_xticks(np.arange(0, len(kernel_threshold), 1 if len(kernel_threshold) < 10 else 5))
+    ax[1, 0].grid()
+
+    ax[1, 1].plot(dumping_factor)
+    ax[1, 1].set_title('Dumping Factor')
+    ax[1, 1].set_xlabel('Iteration')
+    ax[1, 1].set_ylabel('Dumping Factor')
+    ax[1, 1].set_xticks(np.arange(0, len(dumping_factor), 1 if len(dumping_factor) < 10 else 5))
+    ax[1, 1].grid()
+
+    plt.tight_layout()
+    plt.savefig(f'{save_path}.png')
+    plt.close(fig)

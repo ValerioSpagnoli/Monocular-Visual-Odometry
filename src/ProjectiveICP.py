@@ -126,6 +126,8 @@ class ProjectiveICP:
         print(f'Applied transformation of index {min_error_index} to the camera')
         print('================================================================\n')
 
+        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index}/plots/results')
+
 
     def __projective_ICP(self, image_points, frame_index):
         w_T_c0 = self.get_current_pose()
@@ -159,7 +161,7 @@ class ProjectiveICP:
             
             if self.__save_plots and (len(self.__save_plots_indices) == 0 or frame_index in self.__save_plots_indices):
                 projected_world_points = self.__camera.project_points(current_world_points)
-                save_path = f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}_icp_subplots'
+                save_path = f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}'
                 plot_icp_frame(reference_image_points, projected_world_points, save_path, title=f'Frame: {frame_index}, Iteration: {icp_iteration}', set_1_title='Reference Image Points', set_2_title='Projected World Points')
 
             w_T_c1, results, computation_done = self.__one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
