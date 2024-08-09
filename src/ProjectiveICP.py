@@ -78,10 +78,9 @@ class ProjectiveICP:
 
     def update(self, frame_index):
         if os.path.exists(f'outputs/frame_{frame_index}'): os.system(f'rm -r outputs/frame_{frame_index}')
-        os.makedirs(f'outputs/frame_{frame_index}', exist_ok=True)
-        os.makedirs(f'outputs/frame_{frame_index}/icp', exist_ok=True)
-        os.makedirs(f'outputs/frame_{frame_index}/plots', exist_ok=True)
-
+        os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
+        os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
+        
         #* Get the measurements of the current frame and the next frame
         current_measurement = self.__data.get_measurements_data(frame_index)
         next_measurement = self.__data.get_measurements_data(frame_index+1)
@@ -92,7 +91,7 @@ class ProjectiveICP:
             self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
             print(f'Frame: {frame_index} - No valid transformation found.')
             print('================================================================\n') 
-            plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index}/plots/results')
+            plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index}/results')
             return
         
         #* Triangulate points
@@ -132,7 +131,7 @@ class ProjectiveICP:
         print(f'Applied transformation of index {min_error_index} to the camera')
         print('================================================================\n')
 
-        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index}/plots/results')
+        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
 
 
     def __projective_ICP(self, image_points, frame_index):
