@@ -66,20 +66,21 @@ class ProjectiveICP:
         E, mask = cv2.findEssentialMat(points_0, points_1, K, method=cv2.RANSAC, prob=0.999, threshold=1.0)
         _, R, t, mask = cv2.recoverPose(E, points_0, points_1, K, mask=mask)
         c0_T_c1 = Rt2T(R, -t)
-        w_T_1 = w_T_c0 @ c0_T_c1
+        w_T_c1 = w_T_c0 @ c0_T_c1
 
         #* Triangulate points
-        points_3D, mask = triangulate_points(points_0, points_1, w_T_c0, w_T_1, K)
+        points_3D, mask = triangulate_points(points_0, points_1, w_T_c0, w_T_c1, K)
         
         #* Update the state
         map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
-        self.__update_state(w_T_1, map)
+        self.__update_state(w_T_c1, map)
 
 
     def update(self, frame_index):
-        if os.path.exists(f'outputs/frame_{frame_index}'): os.system(f'rm -r outputs/frame_{frame_index}')
         os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
-        os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
+        if self.__save_plots: 
+            os.system(f'rm -r outputs/frame_{frame_index}/icp')
+            os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
         
         #* Get the measurements of the current frame and the next frame
         current_measurement = self.__data.get_measurements_data(frame_index)
