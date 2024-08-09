@@ -155,4 +155,5 @@ class VisualOdometry:
         plot_matches(fig, estimated_world_points_in_world_matched, gt_world_points_matched, name='Map matches', color='violet', width=2)
 
         fig.update_layout(scene=dict(aspectmode='data'))
-        # fig.show()
+
+        fig.show()
