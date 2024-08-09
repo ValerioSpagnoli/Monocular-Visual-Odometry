@@ -1,10 +1,10 @@
 from src.VisualOdometry import VisualOdometry
 
 initial_frame = 0
-final_frame = 50
+final_frame = 51
 verbose = False
-save_plots = True
-save_plots_indices = [1]
+save_plots = False
+save_plots_indices = []
 
 vo = VisualOdometry(initial_frame=initial_frame, 
                     final_frame=final_frame, 

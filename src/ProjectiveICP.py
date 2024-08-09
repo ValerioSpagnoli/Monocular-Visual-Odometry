@@ -92,6 +92,7 @@ class ProjectiveICP:
             self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
             print(f'Frame: {frame_index} - No valid transformation found.')
             print('================================================================\n') 
+            plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index}/plots/results')
             return
         
         #* Triangulate points
