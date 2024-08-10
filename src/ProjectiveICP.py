@@ -79,7 +79,8 @@ class ProjectiveICP:
     def update(self, frame_index):
         os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
         if self.__save_plots: 
-            os.system(f'rm -r outputs/frame_{frame_index:02d}/icp')
+            if os.path.exists(f'outputs/frame_{frame_index:02d}/icp'):
+                os.system(f'rm -r outputs/frame_{frame_index:02d}/icp')
             os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
         
         #* Get the measurements of the current frame and the next frame
@@ -92,7 +93,7 @@ class ProjectiveICP:
             self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
             print(f'Frame: {frame_index} - No valid transformation found.')
             print('================================================================\n') 
-            plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
+            # plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
             return
         
         #* Triangulate points
@@ -132,7 +133,7 @@ class ProjectiveICP:
         print(f'Applied transformation of index {min_error_index} to the camera')
         print('================================================================\n')
 
-        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
+        # plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
 
 
     def __projective_ICP(self, image_points, frame_index):
@@ -183,11 +184,12 @@ class ProjectiveICP:
 
             #* Compute the error slope and the mean and sigma of the last <limit> (10) error slopes
             if icp_iteration > 1: 
-                error_slope = np.abs(error_prev - error)
+                if error == np.Inf or error_prev == np.Inf: error_slope = 1e3
+                else: error_slope = np.abs(error_prev - error)
                 error_slope_ring_buffer[icp_iteration % len(error_slope_ring_buffer)] = error_slope
                 error_mean_slope = np.mean(error_slope_ring_buffer)
                 error_sigma_slope = np.std(error_slope_ring_buffer)
-            
+
             #* If the computation is valid and the error slope mean and sigma are small, increment the stuck counter
             if computation_done and error_mean_slope < 1e-2 and error_sigma_slope < 1e-2: stuck_counter += 1
             else: stuck_counter = 0
@@ -201,7 +203,7 @@ class ProjectiveICP:
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 0.5: stop = True
+            if computation_done and error < 0.01: stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
@@ -213,7 +215,7 @@ class ProjectiveICP:
             iterations_results['dumping_factor'].append(dumping_factor)
             error_prev = error
 
-            if self.__verbose:
+            if self.__verbose or frame_index in self.__save_plots_indices:
                 print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
                 print(f'  - Error:            {np.round(error, 5)}')
                 print(f'  - Num inliers:      {num_inliers}')
@@ -222,10 +224,10 @@ class ProjectiveICP:
                 print('------------------------------------------------------------\n')
 
         #* If the best iteration has an error greater than 30, ignore the computation and return the current pose
-        if iterations_results['error'][np.argmin(iterations_results['error'])] > 30:  
+        if iterations_results['error'][np.argmin(iterations_results['error'])] > 2:  
             self.__camera.set_c_T_w(np.linalg.inv(self.get_current_pose()))
             return self.get_current_pose(), False, iterations_results
-        
+
         #* Otherwise, update the camera with the best iteration
         T = iterations_results['T'][np.argmin(iterations_results['error'])]
         self.__camera.set_c_T_w(np.linalg.inv(T))
@@ -239,7 +241,7 @@ class ProjectiveICP:
         if (len(current_world_points) == 0): return w_T_c0, {'num_inliers': 0, 'error': np.Inf, 'kernel_threshold': kernel_threshold}, False
 
         #* Linearize the problem, computing H and b
-        H, b, num_inliers, error = self.__linearize(reference_image_points, current_world_points, kernel_threshold)
+        H, b, num_inliers, error = self.__linearize(reference_image_points, current_world_points, kernel_threshold, w_T_c0)
         results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
 
         #* If the number of inliers is less than the minimum required, increment the kernel threshold and return a non-valid computation
@@ -261,7 +263,7 @@ class ProjectiveICP:
         return w_T_c1, results, True
     
     
-    def __linearize(self, reference_image_points, currrent_world_points, kernel_threshold):
+    def __linearize(self, reference_image_points, currrent_world_points, kernel_threshold, w_T_c0):
         H = np.zeros((6, 6))
         b = np.zeros(6)
 
@@ -274,7 +276,7 @@ class ProjectiveICP:
             current_world_point = currrent_world_points[i]
             
             #* Compute the error and the jacobian
-            error, jacobian = self.__error_and_jacobian(reference_image_point, current_world_point)
+            error, jacobian = self.__error_and_jacobian(reference_image_point, current_world_point, w_T_c0)
             if error is None or jacobian is None: continue
                 
             #* Compute the chi squared error, if it is less than the kernel threshold consider it an inlier
@@ -285,12 +287,17 @@ class ProjectiveICP:
                 jacobians.append(jacobian)
                  
         #* Compute the mean of the chi squared errors and filter the inliers to obtain a better estimation of the pose
+        if len(chi_inliers) == 0: return H, b, 0, np.inf
         chi_inliers_mean = np.mean(chi_inliers)
         chi_inliers_mask = np.array(chi_inliers) < chi_inliers_mean
 
-        chi_inliers = np.array(chi_inliers)[chi_inliers_mask]
-        errors = np.array(errors)[chi_inliers_mask]
-        jacobians = np.array(jacobians)[chi_inliers_mask]
+        filtered_chi_inliers = np.array(chi_inliers)[chi_inliers_mask]
+        filtered_errors = np.array(errors)[chi_inliers_mask]
+        filtered_jacobians = np.array(jacobians)[chi_inliers_mask]
+        if len(filtered_chi_inliers) >= self.__min_inliers:
+            chi_inliers = filtered_chi_inliers
+            errors = filtered_errors
+            jacobians = filtered_jacobians
 
         #* Add the errors and jacobians to the linear system
         for i in range(len(errors)):
@@ -299,13 +306,14 @@ class ProjectiveICP:
             H += jacobian.T @ jacobian 
             b += jacobian.T @ error
             
-        num_inliers = len(errors)
-        error = np.mean(chi_inliers) if num_inliers > 0 else np.inf 
+        num_inliers = len(chi_inliers)
+        if num_inliers > 0: error = np.mean(chi_inliers)
+        else: error = np.inf
 
         return H, b, num_inliers, error
 
 
-    def __error_and_jacobian(self, reference_image_point, current_world_point):
+    def __error_and_jacobian(self, reference_image_point, current_world_point, w_T_c0):
         
         #* Project the current world point into the image
         is_inside, projected_image_point = self.__camera.project_point(current_world_point)    
@@ -315,7 +323,7 @@ class ProjectiveICP:
         e = reference_image_point - projected_image_point
 
         #* Compute the point in camera coordinates
-        p_hat_hom = np.linalg.inv(self.get_current_pose()) @ np.append(current_world_point, 1)
+        p_hat_hom = np.linalg.inv(w_T_c0) @ np.append(current_world_point, 1)
         p_hat = p_hat_hom[:3] / p_hat_hom[3]
         p_hat_cam = self.__camera.get_camera_matrix() @ p_hat
 
