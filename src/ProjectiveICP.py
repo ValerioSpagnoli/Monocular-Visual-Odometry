@@ -89,23 +89,20 @@ class ProjectiveICP:
         
         #* Projective ICP 
         w_T_c1, is_valid, iterations_results = self.__projective_ICP(next_measurement, frame_index)
-        if not is_valid: 
-            self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
-            print(f'Frame: {frame_index} - No valid transformation found.')
-            print('================================================================\n') 
-            # plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
-            return
         
         #* Triangulate points
-        matches = data_association_on_appearance(current_measurement, next_measurement)
-        points_0 = np.array(matches['points_1'])
-        points_1 = np.array(matches['points_2'])
-        appearances = np.array(matches['appearance'])
-        points_3D, mask = triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1, self.__camera.get_camera_matrix())
+        if is_valid:
+            matches = data_association_on_appearance(current_measurement, next_measurement)
+            points_0 = np.array(matches['points_1'])
+            points_1 = np.array(matches['points_2'])
+            appearances = np.array(matches['appearance'])
+            points_3D, mask = triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1, self.__camera.get_camera_matrix())
 
-        #* Update the state
-        map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
-        self.__update_state(w_T_c1, map)
+            #* Update the state
+            map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
+            self.__update_state(w_T_c1, map)
+        else:
+            self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
 
         #* Print the results
         min_error_index = np.argmin(iterations_results['error'])
@@ -113,6 +110,7 @@ class ProjectiveICP:
         icp_iteration = len(iterations_results['T'])
 
         print(f'Frame: {frame_index}')
+        print(f'  - Valid transformation:             {is_valid}')
         print(f'  - Num iterations:                   {icp_iteration}\n')
         print(f'  - Error best iteration:             {np.round(iterations_results["error"][min_error_index], 5)} (index: {min_error_index})')
         print(f'  - Error worst iteration:            {np.round(iterations_results["error"][max_error_index], 5)} (index: {max_error_index})')    
