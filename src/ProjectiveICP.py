@@ -173,12 +173,25 @@ class ProjectiveICP:
                 plot_icp_frame(reference_image_points, projected_world_points, save_path, title=f'Frame: {frame_index}, Iteration: {icp_iteration}', set_1_title='Reference Image Points', set_2_title='Projected World Points')
 
             #* One step of the ICP algorithm
-            w_T_c1, results, computation_done = self.__one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
+            results = self.__one_step(reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor)
+            w_T_c1 = results['T']
             num_inliers = results['num_inliers']
             error = results['error']  
+            computation_done = results['computation_done']
 
-            #* Update the kernel threshold based on the number of inliers  
-            kernel_threshold = kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else results['kernel_threshold']
+            # #* Update the kernel threshold based on the number of inliers  
+            # kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else kernel_threshold
+            # #* If the number of inliers is less than the minimum required, increment the kernel threshold and return a non-valid computation
+            # if num_inliers < self.__min_inliers and kernel_threshold < self.__max_kernel_threshold: kernel_threshold += 50
+            # #* If there are enough inliers and the error is small and the kernel threshold is greater than the minimum, reduce the kernel threshold
+            # if kernel_threshold > self.__min_kernel_threshold and error < 5: kernel_threshold -= 50
+            
+            if num_inliers == len(reference_image_points): 
+                kernel_threshold = self.__min_kernel_threshold
+            elif num_inliers < self.__min_inliers:
+                if kernel_threshold+10 <= self.__max_kernel_threshold: kernel_threshold += 10
+            elif num_inliers >= self.__min_inliers:
+                if kernel_threshold-10 >= self.__min_kernel_threshold: kernel_threshold -= 10
 
             #* Compute the error slope and the mean and sigma of the last <limit> (10) error slopes
             if icp_iteration > 1: 
@@ -201,7 +214,7 @@ class ProjectiveICP:
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 0.01: stop = True
+            if computation_done and error < 0.0001: stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
@@ -222,7 +235,7 @@ class ProjectiveICP:
                 print('------------------------------------------------------------\n')
 
         #* If the best iteration has an error greater than 30, ignore the computation and return the current pose
-        if iterations_results['error'][np.argmin(iterations_results['error'])] > 2:  
+        if iterations_results['error'][np.argmin(iterations_results['error'])] > 1:  
             self.__camera.set_c_T_w(np.linalg.inv(self.get_current_pose()))
             return self.get_current_pose(), False, iterations_results
 
@@ -236,29 +249,17 @@ class ProjectiveICP:
     def __one_step(self, reference_image_points, current_world_points, w_T_c0, kernel_threshold, dumping_factor):
 
         #* If there are no points, return the current pose
-        if (len(current_world_points) == 0): return w_T_c0, {'num_inliers': 0, 'error': np.Inf, 'kernel_threshold': kernel_threshold}, False
+        if (len(current_world_points) == 0): return {'T': w_T_c0, 'num_inliers': 0, 'error': np.Inf, 'computation_done': False}
 
         #* Linearize the problem, computing H and b
         H, b, num_inliers, error = self.__linearize(reference_image_points, current_world_points, kernel_threshold, w_T_c0)
-        results = {'num_inliers': num_inliers, 'error': error, 'kernel_threshold': kernel_threshold}
-
-        #* If the number of inliers is less than the minimum required, increment the kernel threshold and return a non-valid computation
-        if num_inliers < self.__min_inliers and kernel_threshold < self.__max_kernel_threshold: 
-            kernel_threshold += 50
-            results['kernel_threshold'] = kernel_threshold
-            return w_T_c0, results, False
         
-        #* If there are enough inliers and the error is small and the kernel threshold is greater than the minimum, reduce the kernel threshold
-        if kernel_threshold > self.__min_kernel_threshold and error < 5: 
-            kernel_threshold -= 50
-            results['kernel_threshold'] = kernel_threshold
-
         #* Solve the system and update the pose
         H += np.eye(6) * dumping_factor
         dx = np.linalg.lstsq(H, -b, rcond=None)[0]
         w_T_c1 = v2T(dx) @ w_T_c0
 
-        return w_T_c1, results, True
+        return {'T': w_T_c1, 'num_inliers': num_inliers, 'error': error, 'computation_done': True}
     
     
     def __linearize(self, reference_image_points, currrent_world_points, kernel_threshold, w_T_c0):

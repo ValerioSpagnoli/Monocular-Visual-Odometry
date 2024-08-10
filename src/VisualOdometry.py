@@ -19,16 +19,16 @@ class VisualOdometry:
         self.__save_plots_indices = save_plots_indices
 
         #** Projective ICP parameters
-        self.__kernel_threshold = 1000
+        self.__kernel_threshold = 1500
         self.__min_kernel_threshold = 100
-        self.__max_kernel_threshold = 1e5
+        self.__max_kernel_threshold = 3*1e3
 
-        self.__dumping_factor = 1e5
+        self.__dumping_factor = 1e4
         self.__min_dumping_factor = 1e3
         self.__max_dumping_factor = 1e9
 
         self.__min_inliners = 10
-        self.__num_iterations = 200
+        self.__num_iterations = 300
 
         #** Camera and Data
         self.__camera = Camera()
