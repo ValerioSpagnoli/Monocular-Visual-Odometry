@@ -81,6 +81,8 @@ Then a 6D vector describing the relative pose of the camera w.r.t the previous p
 </p>
 
 ### Numerical results
+
+
 | **General Parameters**            |  | **Rotation Errors**               | | **Translation Errors**            |  |
 |-----------------------------------|-----------|-----------------------------------|-----------|-----------------------------------|-----------|
 | Number of frames                  | 50        | Max rotation error [rad]          | 0.07941   | Max translation error ratio       | 5.11733   |
