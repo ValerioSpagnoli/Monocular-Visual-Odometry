@@ -58,7 +58,7 @@ The linearization part takes as input the reference image points (from the measu
 <img src="media/equations/jacobians.png" alt="First Estimate" width="240"/>
 </p>
 
-Then the error is used to compute the `chi = e^T @ e`:
+Then the error is used to compute the `chi = e^T e`:
 - `if chi <= kernel_threshold: point is inlier`, 
 - `else: point is outlier`.
 
@@ -81,4 +81,13 @@ Then a 6D vector describing the relative pose of the camera w.r.t the previous p
 </p>
 
 ### Numerical results
-The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see from the plots 
+The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see in the plot below, the errors (both in rotation and translation) have a spike between the frames 15 and 24, which are the ones relative to the first curve of the trajectory.
+
+<p align="center">
+<img src="media/errors.png" alt="First Estimate" width="600"/>
+</p>
+
+
+| **General Results**                        | **Rotation Errors**                       | **Translation Errors**                    |
+|-----------------------------------------------|-------------------------------------------|-------------------------------------------|
+| <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Number of frames</td><td>50</td></tr><tr><td>Number of world points</td><td>314</td></tr><tr><td>RMSE estimated map [m]</td><td>0.1454</td></tr><tr><td>Scale</td><td>0.20284</td></tr></table> | <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Max rotation error [rad]</td><td>0.07941</td></tr><tr><td>Min rotation error [rad]</td><td>0.0</td></tr><tr><td>Mean rotation error [rad]</td><td>0.01111</td></tr><tr><td>Max rotation error [deg]</td><td>4.55003</td></tr><tr><td>Min rotation error [deg]</td><td>0.0</td></tr><tr><td>Mean rotation error [deg]</td><td>0.63657</td></tr></table> | <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Max translation error ratio</td><td>5.11733</td></tr><tr><td>Min translation error ratio</td><td>4.71346</td></tr><tr><td>Mean translation error ratio</td><td>4.92998</td></tr><tr><td>Max translation error norm</td><td>1.62579</td></tr><tr><td>Min translation error norm</td><td>1.38921</td></tr><tr><td>Mean translation error norm</td><td>1.44381</td></tr></table> |
