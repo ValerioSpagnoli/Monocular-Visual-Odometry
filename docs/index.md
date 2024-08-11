@@ -10,8 +10,8 @@ The robot is equioped with a monocular camera with known intrinsic and extrinsic
 
 ### Data
 Set of 120 measurements where each measurement contains a variable set of pairs (image_point, appearance), where:
-- image point: $[r,c] \quad 1 \times 2$ vector. 
-- appearance: $[f_1, ..., f_{10}] \quad 1 \times 10$ vector (feature descriptor)
+- image point: `[r,c] 1x2` vector. 
+- appearance: `[f_1, ..., f_{10}] 1x10` vector (feature descriptor)
 
 
 ### Algorithm
@@ -42,44 +42,35 @@ A single step of the projective ICP is divided in two parts:
 1. linearize the problem;
 2. resolve the linerized problem with a least square approach.
    
-The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world ${}^wT_{c_0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
+The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world `w_T_c0`. Then, calculates the matrix *H* and the vector *b* by computing for each pair of points the error *e* and the jacobian *J* in this way:
 - Projected world point: 
 <p align="center">
-<img src="media/eq1.png" alt="First Estimate" width="450"/>
+<img src="media/equations/projected_world_point.png" alt="First Estimate" width="515"/>
 </p>
 
  - Error: 
- $$
- e = p_r-\hat{p}_{cam}
- $$
+<p align="center">
+<img src="media/equations/error.png" alt="First Estimate" width="105"/>
+</p>
+
 - Jacobian: 
- $$
- \begin{align}
- J &= J_{proj}(\hat{p}_{cam})  K  J_{icp}\\
- J_{icp} &= [I_{3\times3} | ⌊-\hat{p}⌋_\times] \\
- J_{proj}(\hat{p}_{cam}) &= \begin{bmatrix}\frac{1}{z} & 0 & -\frac{x}{z^2} \\ 0 & \frac{1}{z} & \frac{y}{z^2} \end{bmatrix}
- \end{align}
- $$
+<p align="center">
+<img src="media/equations/jacobians.png" alt="First Estimate" width="240"/>
+</p>
 
-Then the error is used to compute the $chi = e^T e$:
-- if $chi \le kernel \space threshold$, then the point is considered as **inlier**, 
-- otherwise is discarded because is an **outlier**.
+Then the error is used to compute the `chi = e^T @ e`:
+- `if chi <= kernel_threshold: point is inlier`, 
+- `else: point is outlier`.
 
-The errors and jacobians from the inliers are used to compute $H$ and $b$ as:
-$$
-\begin{align}
-H &= H + J^T J \\
-b &= b + J^T e 
-\end{align}
-$$
+The errors and jacobians from the inliers are used to compute *H* and *b* as:
+<p align="center">
+<img src="media/equations/H_b.png" alt="First Estimate" width="120"/>
+</p>
 
 Then a 6D vector describing the relative pose of the camera w.r.t the previous pose is calculated by solving 
-$$
-\begin{align}
-dx \leftarrow slove_{lstq}(H dx = -b) \\
-{}^wT_{c_1} = v2T(dx) {}^wT_{c_0}
-\end{align}
-$$
+<p align="center">
+<img src="media/equations/system.png" alt="First Estimate" width="215"/>
+</p>
 
 
 ## Results
