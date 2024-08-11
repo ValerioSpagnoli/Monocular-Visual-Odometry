@@ -97,3 +97,8 @@ w\_T\_c_1 = v2T(dx) w\_T\_c_0
 
 
 ## Results
+<video width="320" height="240" controls>
+  <source src="raw_outputs/frame_01/output_video.mp4" type="video/mp4">
+</video>
+
+![](raw_outputs/frame_01/output_video.mp4)
