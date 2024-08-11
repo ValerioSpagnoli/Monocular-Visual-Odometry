@@ -1,7 +1,7 @@
 # Projective ICP Visual Odometry
 
 <p align="center">
-<img src="../outputs/frame_01/icp.gif" alt="First Estimate" width="600"/>
+<img src="media/icp.gif" alt="First Estimate" width="600"/>
 </p>
 
 ## Description
@@ -100,11 +100,8 @@ dx \leftarrow slove_{lstq}(H dx = -b) \\
 
 ### Visual results
 <p align="center">
-<iframe src="outputs/final_results/3D_plot.html" width="1200" height="800" style="border:none;"></iframe>
+<iframe src="media/3D_plot.html" width="800" height="600" style="border:none;"></iframe>
 </p>
 
 ### Numerical results
 The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see from the plots 
-<p align="center">
-<img src="outputs/final_results/errors.png" alt="First Estimate" width="600"/>
-</p>
