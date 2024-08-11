@@ -46,11 +46,11 @@ A single step of the projective ICP is divided in two parts:
 1. linearize the problem;
 2. resolve the linerized problem with a least square approach.
    
-The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world $w\_T\_c_{0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
+The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world ${}^wT_{c_0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
 - Projected world point: 
  ```math
  \begin{align}
- \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv(w\_T\_c_0) p_{w,hom}\\
+ \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv({}^wT_{c_0}) p_{w,hom}\\
  \text{World point in camera coordinates: } &\hat{p} = p_{w,hom}[:3]/p_{w,hom}[3]\\
  \text{World point on image plane (hom): } &\hat{p}_{cam}=K p_w\\
  \end{align}
@@ -84,7 +84,7 @@ Then a 6D vector describing the relative pose of the camera w.r.t the previous p
 ```math
 \begin{align}
 dx \leftarrow slove_{lstq}(H dx = -b) \\
-w\_T\_c_1 = v2T(dx) w\_T\_c_0
+{}^wT_{c_1} = v2T(dx) {}^wT_{c_0}
 
 \end{align}
 ```
