@@ -1,7 +1,7 @@
 # Projective ICP Visual Odometry
 
 <p align="center">
-<img src="media/icp.gif" alt="First Estimate" width="600"/>
+<img src="media/icp.gif" alt="First Estimate" width="800"/>
 </p>
 
 ## Description
@@ -44,56 +44,45 @@ A single step of the projective ICP is divided in two parts:
    
 The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world ${}^wT_{c_0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
 - Projected world point: 
- ```math
+ $$
  \begin{align}
  \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv({}^wT_{c_0}) p_{w,hom}\\
  \text{World point in camera coordinates: } &\hat{p} = p_{w,hom}[:3]/p_{w,hom}[3]\\
  \text{World point on image plane (hom): } &\hat{p}_{cam}=K p_w\\
  \end{align}
- ```
+ $$
  - Error: 
- ```math
+ $$
  e = p_r-\hat{p}_{cam}
- ```
+ $$
 - Jacobian: 
- ```math
+ $$
  \begin{align}
  J &= J_{proj}(\hat{p}_{cam})  K  J_{icp}\\
  J_{icp} &= [I_{3\times3} | ⌊-\hat{p}⌋_\times] \\
  J_{proj}(\hat{p}_{cam}) &= \begin{bmatrix}\frac{1}{z} & 0 & -\frac{x}{z^2} \\ 0 & \frac{1}{z} & \frac{y}{z^2} \end{bmatrix}
  \end{align}
- ```
+ $$
 
 Then the error is used to compute the $chi = e^T e$:
 - if $chi \le kernel \space threshold$, then the point is considered as **inlier**, 
 - otherwise is discarded because is an **outlier**.
 
 The errors and jacobians from the inliers are used to compute $H$ and $b$ as:
-```math
+$$
 \begin{align}
 H &= H + J^T J \\
 b &= b + J^T e 
 \end{align}
-```
+$$
 
 Then a 6D vector describing the relative pose of the camera w.r.t the previous pose is calculated by solving 
-```math
+$$
 \begin{align}
 dx \leftarrow slove_{lstq}(H dx = -b) \\
 {}^wT_{c_1} = v2T(dx) {}^wT_{c_0}
-
 \end{align}
-```
-
-## Usage
-1. Install the requirements:
-    ```
-    pip3 install -r requirements.txt
-    ```
-2. Run the main
-    ```
-    python3 main.py
-    ```
+$$
 
 
 ## Results
