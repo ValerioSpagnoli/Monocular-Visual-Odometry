@@ -100,7 +100,7 @@ dx \leftarrow slove_{lstq}(H dx = -b) \\
 
 ### Visual results
 <p align="center">
-<iframe src="media/3D_plot.html" width="800" height="600" style="border:none;"></iframe>
+<iframe src="media/3D_plot.html" width="800" height="600"></iframe>
 </p>
 
 ### Numerical results
