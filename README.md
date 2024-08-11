@@ -44,13 +44,13 @@ A single step of the projective ICP is divided in two parts:
    
 The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world ${}^wT_{c_0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
 - Projected world point: 
- ```math
+ $$
  \begin{align}
  \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv({}^wT_{c_0}) p_{w,hom}\\
  \text{World point in camera coordinates: } &\hat{p} = p_{w,hom}[:3]/p_{w,hom}[3]\\
  \text{World point on image plane (hom): } &\hat{p}_{cam}=K p_w\\
  \end{align}
- ```
+ $$
  - Error: 
  ```math
  e = p_r-\hat{p}_{cam}
@@ -103,8 +103,8 @@ Legend:
 - **<span style="color: firebrick;">red</span>**: estimated trajectory;
 - **<span style="color: royalblue;">blue</span>**: ground truth trajectory;
 - **<span style="color: orange;">orange</span>**: estimated map.
-- **<span style="color: green;">cyan</span>**: ground truth map.
-  
+- **<span style="color: green;">green</span>**: ground truth map.
+
 | Trajectory from top view | Trajectory from side views |
 |:--------:|:--------:|
 | <p align="center"><img src="outputs/final_results/trajectory_top.png" alt="First Estimate" width="300"/></p> | <p align="center"><img src="outputs/final_results/trajectory_z1.png" alt="First Estimate" width="420"/></p> <br> <p align="center"><img src="outputs/final_results/trajectory_z2.png" alt="First Estimate" width="420"/></p> |
