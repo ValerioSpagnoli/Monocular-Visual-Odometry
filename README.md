@@ -27,10 +27,6 @@ These steps provide a first estimate of the pose of the camera.
 
 Then a first estimated of the map is computed by triangulating the image points of the first two measurement, using the estimated pose.
 
-<!-- <p align="center">
-<img src="outputs/Final Results/first_estimate.png" alt="First Estimate" width="600"/>
-</p> -->
-
 #### Update step
 The update steps takes one measurement at the time and perform the projective ICP algorithm between the current measurement and the current estimated 3D map, to recover the relative pose of the camera with these steps:
 1. matches the image points of the current measurement with the 3D points of the map using the appearance;

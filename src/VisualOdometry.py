@@ -157,3 +157,4 @@ class VisualOdometry:
         fig.update_layout(scene=dict(aspectmode='data'))
 
         fig.show()
+        fig.write_html("outputs/final_results/3D_plot.html")
