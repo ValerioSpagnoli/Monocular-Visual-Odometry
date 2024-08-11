@@ -51,7 +51,7 @@ The linearization part takes as input the reference image points (from the measu
  \text{World point on image plane (hom): } &\hat{p}_{cam}=K p_w\\
  \end{align}
  ```
-- Error: 
+ - Error: 
  ```math
  e = p_r-\hat{p}_{cam}
  ```
@@ -105,6 +105,8 @@ Legend:
 - **<span style="color: orange;">orange</span>**: estimated map.
 - **<span style="color: green;">cyan</span>**: ground truth map.
   
+<iframe src="outputs/final_results/3D_plot.html" width="600" height="400"></iframe>
+
 | Trajectory from top view | Trajectory from side views |
 |:--------:|:--------:|
 | <p align="center"><img src="outputs/final_results/trajectory_top.png" alt="First Estimate" width="300"/></p> | <p align="center"><img src="outputs/final_results/trajectory_z1.png" alt="First Estimate" width="420"/></p> <br> <p align="center"><img src="outputs/final_results/trajectory_z2.png" alt="First Estimate" width="420"/></p> |
