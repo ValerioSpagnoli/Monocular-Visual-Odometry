@@ -97,3 +97,24 @@ dx \leftarrow slove_{lstq}(H dx = -b) \\
 
 
 ## Results
+
+### Visual results
+Legend:
+- **<span style="color: firebrick;">red</span>**: estimated trajectory;
+- **<span style="color: royalblue;">blue</span>**: ground truth trajectory;
+- **<span style="color: orange;">orange</span>**: estimated map.
+- **<span style="color: green;">cyan</span>**: ground truth map.
+  
+| Trajectory from top view | Trajectory from side views |
+|:--------:|:--------:|
+| <p align="center"><img src="outputs/final_results/trajectory_top.png" alt="First Estimate" width="300"/></p> | <p align="center"><img src="outputs/final_results/trajectory_z1.png" alt="First Estimate" width="420"/></p> <br> <p align="center"><img src="outputs/final_results/trajectory_z2.png" alt="First Estimate" width="420"/></p> |
+
+| Estimated map | Estimated map and GT map | 
+|:--------:|:--------:|
+| <p align="center"><img src="outputs/final_results/trajectory+estimated_map.png" alt="First Estimate" width="400"/></p> | <p align="center"><img src="outputs/final_results/trajectory+maps.png" alt="First Estimate" width="425"/></p> |
+
+### Numerical results
+The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see from the plots 
+<p align="center">
+<img src="outputs/final_results/errors.png" alt="First Estimate" width="600"/>
+</p>

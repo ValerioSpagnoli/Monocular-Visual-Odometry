@@ -75,6 +75,8 @@ class ProjectiveICP:
         map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_c1, map)
 
+        return True
+
 
     def update(self, frame_index):
         os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
@@ -98,11 +100,6 @@ class ProjectiveICP:
             appearances = np.array(matches['appearance'])
             points_3D, mask = triangulate_points(points_0, points_1, self.get_current_pose(), w_T_c1, self.__camera.get_camera_matrix())
 
-            #* Update the state
-            map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
-            self.__update_state(w_T_c1, map)
-        else:
-            self.__update_state(w_T_c1, {'position':[], 'appearance':[]})
 
         #* Print the results
         min_error_index = np.argmin(iterations_results['error'])
@@ -132,6 +129,14 @@ class ProjectiveICP:
         print('================================================================\n')
 
         plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
+
+        #* Update the state
+        if is_valid: 
+            map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
+            self.__update_state(w_T_c1, map)
+            return True
+        else: 
+            return False
 
 
     def __projective_ICP(self, image_points, frame_index):

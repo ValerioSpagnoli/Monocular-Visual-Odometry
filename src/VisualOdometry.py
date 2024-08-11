@@ -56,11 +56,15 @@ class VisualOdometry:
         for i in range(self.__initial_frame, self.__final_frame):
             start_frame = time.time()
 
-            if i == self.__initial_frame: self.ProjectiveICP.initialize(i)
-            else: self.ProjectiveICP.update(i)
+            if i == self.__initial_frame: res = self.ProjectiveICP.initialize(i)
+            else: res = self.ProjectiveICP.update(i)
 
             end_frame = time.time()
             frame_times.append(end_frame-start_frame)
+
+            if not res: 
+                print(f'Not valid transform found at frame {i}. Break.')
+                break
         
         end = time.time()
         mean_time_per_frame = np.mean(frame_times)
@@ -99,27 +103,40 @@ class VisualOdometry:
             error_T = np.linalg.inv(delta_poses_estimated_trajectory[i]) @ delta_poses_gt_trajectory[i]
             errors_T.append(error_T)
 
-        rotation_errors = []
+        rotation_errors = {'rad':[], 'deg':[]}
         for i in range(len(errors_T)):
-            rotation_error = np.trace(np.eye(3)-errors_T[i][:3,:3])
-            rotation_errors.append(rotation_error)
+            R_error = errors_T[i][:3,:3]
+            rotation_error_rad = np.trace(np.eye(3)-R_error)
+            rotation_error_deg = np.rad2deg(rotation_error_rad)
+            rotation_errors['rad'].append(rotation_error_rad)
+            rotation_errors['deg'].append(rotation_error_deg)
 
-        translation_errors = []
+        translation_errors = {'ratio':[], 'norm':[]}
         for i in range(len(delta_poses_estimated_trajectory)):
             rel_pose = delta_poses_estimated_trajectory[i]
             rel_pose_gt = delta_poses_gt_trajectory[i]
-            translation_error = np.linalg.norm(rel_pose[:3,3])/np.linalg.norm(rel_pose_gt[:3,3])
-            translation_errors.append(translation_error)
+            translation_error_ratio = np.linalg.norm(rel_pose[:3,3])/np.linalg.norm(rel_pose_gt[:3,3])
+            translation_errors_norm = np.linalg.norm(rel_pose[:3,3]/np.linalg.norm(rel_pose[:3,3])-rel_pose_gt[:3,3]/np.linalg.norm(rel_pose_gt[:3,3]))
+            translation_errors['ratio'].append(translation_error_ratio)
+            translation_errors['norm'].append(translation_errors_norm)
         
-        max_rotation_error = np.max(rotation_errors)
-        min_rotation_error = np.min(rotation_errors)
-        mean_rotation_error = np.mean(rotation_errors)
+        max_rotation_error_rad = np.max(rotation_errors['rad'])
+        min_rotation_error_rad = np.min(rotation_errors['rad'])
+        mean_rotation_error_rad = np.mean(rotation_errors['rad'])
 
-        max_translation_error = np.max(translation_errors)
-        min_translation_error = np.min(translation_errors)
-        mean_translation_error = np.mean(translation_errors)
+        max_rotation_error_deg = np.max(rotation_errors['deg'])
+        min_rotation_error_deg = np.min(rotation_errors['deg'])
+        mean_rotation_error_deg = np.mean(rotation_errors['deg'])
 
-        scale = 1/mean_translation_error
+        max_translation_error_ratio = np.max(translation_errors['ratio'])
+        min_translation_error_ratio = np.min(translation_errors['ratio'])
+        mean_translation_error_ratio = np.mean(translation_errors['ratio'])
+
+        max_translation_error_norm = np.max(translation_errors['norm'])
+        min_translation_error_norm = np.min(translation_errors['norm'])
+        mean_translation_error_norm = np.mean(translation_errors['norm'])
+
+        scale = 1/mean_translation_error_ratio
 
         estimated_trajectory_in_world = transform(estimated_trajectory_in_world, scale=scale)
         estimated_world_points_in_world = transform(estimated_world_points_in_world, scale=scale, are_points=True)
@@ -130,17 +147,28 @@ class VisualOdometry:
         rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(estimated_world_points_in_world_matched)-np.array(gt_world_points_matched), axis=1)**2))
         num_world_points = len(estimated_world_points_in_world_matched)
 
-        print(f'Number of world points: {num_world_points}')
-        print(f'RMSE world map:         {rmse_world_map}\n')
+        print(f'Number of frames:                  {self.__final_frame-self.__initial_frame}')
+        print(f'Number of world points:            {num_world_points}')
+        print(f'RMSE world map [m]:                {np.round(rmse_world_map, 5)}\n')
+        print(f'scale:                             {np.round(scale, 5)}\n')
 
-        print(f'Max rotation error:     {max_rotation_error}')
-        print(f'Min rotation error:     {min_rotation_error}')
-        print(f'Mean rotation error:    {mean_rotation_error}\n')
+        print(f'Rotation errors: \n')
+        print(f'Max rotation error [rad]:          {np.round(max_rotation_error_rad, 5)}')
+        print(f'Min rotation error [rad]:          {np.round(min_rotation_error_rad, 5)}')
+        print(f'Mean rotation error [rad]:         {np.round(mean_rotation_error_rad, 5)}\n')
         
-        print(f'Max translation error:  {max_translation_error}')
-        print(f'Min translation error:  {min_translation_error}')
-        print(f'Mean translation error: {mean_translation_error}')  
-        print(f'scale:                  {scale}')   
+        print(f'Max rotation error [deg]:          {np.round(max_rotation_error_deg, 5)}')
+        print(f'Min rotation error [deg]:          {np.round(min_rotation_error_deg, 5)}')
+        print(f'Mean rotation error [deg]:         {np.round(mean_rotation_error_deg, 5)}\n')
+
+        print(f'Translation errors: \n')
+        print(f'Max translation error ratio:       {np.round(max_translation_error_ratio, 5)}')
+        print(f'Min translation error ratio:       {np.round(min_translation_error_ratio, 5)}')
+        print(f'Mean translation error ratio:      {np.round(mean_translation_error_ratio, 5)}\n')
+
+        print(f'Max translation error norm:        {np.round(max_translation_error_norm, 5)}')
+        print(f'Min translation error norm:        {np.round(min_translation_error_norm, 5)}')
+        print(f'Mean translation error norm:       {np.round(mean_translation_error_norm, 5)}\n')
 
         fig = go.Figure()
         plot_points(fig, poses2positions([gt_trajectory[self.__initial_frame]]), name='Initial GT pose', mode='markers', color='deepskyblue', size=3)
@@ -158,3 +186,5 @@ class VisualOdometry:
 
         fig.show()
         fig.write_html("outputs/final_results/3D_plot.html")
+
+        plot_final_results(rotation_errors, translation_errors, 'outputs/final_results/errors')

@@ -134,3 +134,54 @@ def plot_icp_iterations_results(iterations_results, save_path):
     plt.tight_layout()
     plt.savefig(f'{save_path}.png')
     plt.close(fig)
+
+def plot_final_results(rotation_errors, translation_errors, save_path):
+    rotation_errors_rad = rotation_errors['rad']
+    rotation_errors_deg = rotation_errors['deg']
+
+    translation_errors_ratio = translation_errors['ratio']
+    translation_errors_norm = translation_errors['norm']
+
+    fig, ax = plt.subplots(2, 2, figsize=(15, 10))
+
+    x_ticks = np.arange(0, len(rotation_errors_rad), 5)
+    if len(rotation_errors_rad)-1 not in x_ticks: x_ticks = np.append(x_ticks, len(rotation_errors_rad)-1)
+    x_tick_labels = [str(x) for x in x_ticks]
+
+    ax[0, 0].plot(rotation_errors_rad)
+    ax[0, 0].set_title('Rotation Errors [rad]')
+    ax[0, 0].set_xlabel('Frame')
+    ax[0, 0].set_ylabel('Error [rad]')
+    ax[0, 0].set_xticks(x_ticks)
+    ax[0, 0].set_xticklabels(x_tick_labels)
+    ax[0, 0].grid()
+
+    ax[0, 1].plot(rotation_errors_deg)
+    ax[0, 1].set_title('Rotation Errors [deg]')
+    ax[0, 1].set_xlabel('Frame')
+    ax[0, 1].set_ylabel('Error [deg]')
+    ax[0, 1].set_xticks(x_ticks)
+    ax[0, 1].set_xticklabels(x_tick_labels)
+    ax[0, 1].grid()
+
+    # plot the translation errors in ratio
+    ax[1, 0].plot(translation_errors_ratio)
+    ax[1, 0].set_title('Translation Errors [ratio]')
+    ax[1, 0].set_xlabel('Frame')
+    ax[1, 0].set_ylabel('Error [ratio]')
+    ax[1, 0].set_xticks(x_ticks)
+    ax[1, 0].set_xticklabels(x_tick_labels)
+    ax[1, 0].grid()
+
+    # plot the translation errors in norm
+    ax[1, 1].plot(translation_errors_norm)
+    ax[1, 1].set_title('Translation Errors [norm]')
+    ax[1, 1].set_xlabel('Frame')
+    ax[1, 1].set_ylabel('Error [normalized]')
+    ax[1, 1].set_xticks(x_ticks)
+    ax[1, 1].set_xticklabels(x_tick_labels)
+    ax[1, 1].grid()
+
+    plt.tight_layout()
+    plt.savefig(f'{save_path}.png')
+    plt.close(fig)
