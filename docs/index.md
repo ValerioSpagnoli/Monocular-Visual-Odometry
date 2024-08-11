@@ -82,8 +82,13 @@ Then a 6D vector describing the relative pose of the camera w.r.t the previous p
 
 ### Numerical results
 
+The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see in the plot below, the errors (both in rotation and translation) have a spike between the frames 15 and 24, which are the ones relative to the first curve of the trajectory.
 
-| **General Parameters**            |  | **Rotation Errors**               | | **Translation Errors**            |  |
+<p align="center">
+<img src="media/errors.png" alt="First Estimate" width="600"/>
+</p>
+
+| **General Parameters**            | **Value** | **Rotation Errors**               | **Value** | **Translation Errors**            | **Value** |
 |-----------------------------------|-----------|-----------------------------------|-----------|-----------------------------------|-----------|
 | Number of frames                  | 50        | Max rotation error [rad]          | 0.07941   | Max translation error ratio       | 5.11733   |
 | Number of world points            | 314       | Min rotation error [rad]          | 0.00000   | Min translation error ratio       | 4.71346   |
@@ -91,12 +96,3 @@ Then a 6D vector describing the relative pose of the camera w.r.t the previous p
 | Scale                             | 0.20284   | Max rotation error [deg]          | 4.55003   | Max translation error norm        | 1.62579   |
 |                                   |           | Min rotation error [deg]          | 0.00000   | Min translation error norm        | 1.38921   |
 |                                   |           | Mean rotation error [deg]         | 0.63657   | Mean translation error norm       | 1.44381   |
-
-The algorithm works well, but being without any correction the error increase with the iterations. Moreover, curves in general are very diffucult to handle. Indeed, as we can see in the plot below, the errors (both in rotation and translation) have a spike between the frames 15 and 24, which are the ones relative to the first curve of the trajectory.
-
-<p align="center">
-<img src="media/errors.png" alt="First Estimate" width="600"/>
-</p>
-
-
-
