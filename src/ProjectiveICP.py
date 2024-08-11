@@ -8,14 +8,14 @@ import os
 class ProjectiveICP:
     def __init__(self,  camera, 
                         data,
-                        num_iterations=150, 
-                        min_inliers=12, 
+                        num_iterations=300, 
+                        min_inliers=10, 
                         kernel_threshold=1500, 
-                        min_kernel_threshold=200, 
-                        max_kernel_threshold=1e5, 
-                        dumping_factor=1e3, 
+                        min_kernel_threshold=100, 
+                        max_kernel_threshold=3*1e3, 
+                        dumping_factor=1e4, 
                         min_dumping_factor=1e3, 
-                        max_dumping_factor=1e7, 
+                        max_dumping_factor=1e9, 
                         verbose=False, 
                         save_plots=False, 
                         save_plots_indices=[]):
@@ -79,7 +79,7 @@ class ProjectiveICP:
     def update(self, frame_index):
         os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
         if self.__save_plots: 
-            if os.path.exists(f'outputs/frame_{frame_index:02d}/icp'):
+            if frame_index in self.__save_plots_indices and os.path.exists(f'outputs/frame_{frame_index:02d}/icp'):
                 os.system(f'rm -r outputs/frame_{frame_index:02d}/icp')
             os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
         
@@ -131,7 +131,7 @@ class ProjectiveICP:
         print(f'Applied transformation of index {min_error_index} to the camera')
         print('================================================================\n')
 
-        # plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
+        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
 
 
     def __projective_ICP(self, image_points, frame_index):
@@ -169,7 +169,7 @@ class ProjectiveICP:
             
             if self.__save_plots and (len(self.__save_plots_indices) == 0 or frame_index in self.__save_plots_indices):
                 projected_world_points = self.__camera.project_points(current_world_points)
-                save_path = f'outputs/frame_{frame_index}/icp/iteration_{icp_iteration}'
+                save_path = f'outputs/frame_{frame_index:02d}/icp/iteration_{icp_iteration}'
                 plot_icp_frame(reference_image_points, projected_world_points, save_path, title=f'Frame: {frame_index}, Iteration: {icp_iteration}', set_1_title='Reference Image Points', set_2_title='Projected World Points')
 
             #* One step of the ICP algorithm
@@ -179,13 +179,7 @@ class ProjectiveICP:
             error = results['error']  
             computation_done = results['computation_done']
 
-            # #* Update the kernel threshold based on the number of inliers  
-            # kernel_threshold = self.__min_kernel_threshold if num_inliers == len(reference_image_points) else kernel_threshold
-            # #* If the number of inliers is less than the minimum required, increment the kernel threshold and return a non-valid computation
-            # if num_inliers < self.__min_inliers and kernel_threshold < self.__max_kernel_threshold: kernel_threshold += 50
-            # #* If there are enough inliers and the error is small and the kernel threshold is greater than the minimum, reduce the kernel threshold
-            # if kernel_threshold > self.__min_kernel_threshold and error < 5: kernel_threshold -= 50
-            
+            #* Update the kernel threshold based on the number of inliers              
             if num_inliers == len(reference_image_points): 
                 kernel_threshold = self.__min_kernel_threshold
             elif num_inliers < self.__min_inliers:
@@ -214,7 +208,7 @@ class ProjectiveICP:
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 0.0001: stop = True
+            if computation_done and error < 1e-4: stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
