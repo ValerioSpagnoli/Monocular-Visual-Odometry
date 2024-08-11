@@ -1,5 +1,9 @@
 # Projective ICP Visual Odometry
 
+<p align="center">
+<img src="outputs/frame_01/icp.gif" alt="First Estimate" width="600"/>
+</p>
+
 ## Description
 This project implements a projective ICP based visual odometry, to estimate both the trajectory of a robot and the 3D map of the visual features.
 The robot is equioped with a monocular camera with known intrinsic and extrinsic parameters. 
@@ -42,13 +46,13 @@ A single step of the projective ICP is divided in two parts:
 1. linearize the problem;
 2. resolve the linerized problem with a least square approach.
    
-The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world $w\_T\_c0$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
+The linearization part takes as input the reference image points (from the measurement) and the current world points from the estimated map, already matched, and the current pose of the camera w.r.t the world $w\_T\_c_{0}$. Then, calculates the matrix $H$ and the vector $b$ by computing for each pair of points the error $e$ and the jacobian $J$ in this way:
 - Projected world point: 
  ```math
  \begin{align}
- \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv(w\_T\_c_0) * p_{w,hom}\\
+ \text{World point in camera coordinates (hom): } &\hat{p}_{hom} = inv(w\_T\_c_0) p_{w,hom}\\
  \text{World point in camera coordinates: } &\hat{p} = p_{w,hom}[:3]/p_{w,hom}[3]\\
- \text{World point on image plane (hom): } &\hat{p}_{cam}=K*p_w\\
+ \text{World point on image plane (hom): } &\hat{p}_{cam}=K p_w\\
  \end{align}
  ```
 - Error: 
@@ -58,7 +62,7 @@ The linearization part takes as input the reference image points (from the measu
 - Jacobian: 
  ```math
  \begin{align}
- J &= J_{proj}(\hat{p}_{cam}) * K * J_{icp}\\
+ J &= J_{proj}(\hat{p}_{cam})  K  J_{icp}\\
  J_{icp} &= [I_{3\times3} | ⌊-\hat{p}⌋_\times] \\
  J_{proj}(\hat{p}_{cam}) &= \begin{bmatrix}\frac{1}{z} & 0 & -\frac{x}{z^2} \\ 0 & \frac{1}{z} & \frac{y}{z^2} \end{bmatrix}
  \end{align}
@@ -97,8 +101,3 @@ w\_T\_c_1 = v2T(dx) w\_T\_c_0
 
 
 ## Results
-<video width="320" height="240" controls>
-  <source src="raw_outputs/frame_01/output_video.mp4" type="video/mp4">
-</video>
-
-![](raw_outputs/frame_01/output_video.mp4)
