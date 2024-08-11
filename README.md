@@ -69,7 +69,7 @@ The linearization part takes as input the reference image points (from the measu
  ```
 
 Then the error is used to compute the $chi = e^T e$:
-- if $chi \le \text{kernel\_threshold}$, then the point is considered as **inlier**, 
+- if $chi \le kernel\_threshold$, then the point is considered as **inlier**, 
 - otherwise is discarded because is an **outlier**.
 
 The errors and jacobians from the inliers are used to compute $H$ and $b$ as:
