@@ -88,6 +88,11 @@ The algorithm works well, but being without any correction the error increase wi
 </p>
 
 
-| **General Results**                        | **Rotation Errors**                       | **Translation Errors**                    |
-|-----------------------------------------------|-------------------------------------------|-------------------------------------------|
-| <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Number of frames</td><td>50</td></tr><tr><td>Number of world points</td><td>314</td></tr><tr><td>RMSE estimated map [m]</td><td>0.1454</td></tr><tr><td>Scale</td><td>0.20284</td></tr></table> | <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Max rotation error [rad]</td><td>0.07941</td></tr><tr><td>Min rotation error [rad]</td><td>0.0</td></tr><tr><td>Mean rotation error [rad]</td><td>0.01111</td></tr><tr><td>Max rotation error [deg]</td><td>4.55003</td></tr><tr><td>Min rotation error [deg]</td><td>0.0</td></tr><tr><td>Mean rotation error [deg]</td><td>0.63657</td></tr></table> | <table><tr><td>**Parameter**</td><td>**Value**</td></tr><tr><td>Max translation error ratio</td><td>5.11733</td></tr><tr><td>Min translation error ratio</td><td>4.71346</td></tr><tr><td>Mean translation error ratio</td><td>4.92998</td></tr><tr><td>Max translation error norm</td><td>1.62579</td></tr><tr><td>Min translation error norm</td><td>1.38921</td></tr><tr><td>Mean translation error norm</td><td>1.44381</td></tr></table> |
+| **General Parameters**            | **Value** | **Rotation Errors**               | **Value** | **Translation Errors**            | **Value** |
+|-----------------------------------|-----------|-----------------------------------|-----------|-----------------------------------|-----------|
+| Number of frames                  | 50        | Max rotation error [rad]          | 0.07941   | Max translation error ratio       | 5.11733   |
+| Number of world points            | 314       | Min rotation error [rad]          | 0.00000   | Min translation error ratio       | 4.71346   |
+| RMSE world map [m]                | 0.14540   | Mean rotation error [rad]         | 0.01111   | Mean translation error ratio      | 4.92998   |
+| Scale                             | 0.20284   | Max rotation error [deg]          | 4.55003   | Max translation error norm        | 1.62579   |
+|                                   |           | Min rotation error [deg]          | 0.00000   | Min translation error norm        | 1.38921   |
+|                                   |           | Mean rotation error [deg]         | 0.63657   | Mean translation error norm       | 1.44381   |
