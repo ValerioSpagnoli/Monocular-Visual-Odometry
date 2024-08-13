@@ -1,7 +1,7 @@
 # Projective ICP Visual Odometry
 
 <p align="center">
-<img src="outputs/frame_01/icp.gif" alt="First Estimate" width="800"/>
+<img src="media/icp.gif" alt="First Estimate" width="800"/>
 </p>
 
 ## Description
