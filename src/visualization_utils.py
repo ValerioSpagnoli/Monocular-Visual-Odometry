@@ -77,7 +77,12 @@ def plot_icp_iterations_results(iterations_results, save_path):
     min_error_index = np.argmin(error)
     num_iterations = len(error)
 
-    x_ticks =  np.arange(0, num_iterations, 1 if num_iterations < 10 else 5)
+    step = 1
+    if num_iterations > 10 and num_iterations <= 50: step = 5
+    elif num_iterations > 50 and num_iterations <= 100: step = 10
+    else: step = 20
+
+    x_ticks =  np.arange(0, num_iterations, step)
     if num_iterations-1 not in x_ticks: x_ticks = np.append(x_ticks, num_iterations-1)
     x_tick_labels = [str(x) for x in x_ticks]
     
