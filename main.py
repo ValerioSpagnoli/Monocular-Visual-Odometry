@@ -1,7 +1,7 @@
 from src.VisualOdometry import VisualOdometry
 
 initial_frame = 0          #* frame of the data to start with
-final_frame = 49           #* frame of the data to end with
+final_frame = 50           #* frame of the data to end with
 verbose = False            #* print additional information for each iteration of PICP
 save_plots = False         #* save plots of the PICP iterations (is very slow and takes a lot of memory)
 save_plots_indices = []    #* save plots of the PICP iterations for the specified indices

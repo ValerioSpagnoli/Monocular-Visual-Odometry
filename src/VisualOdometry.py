@@ -11,7 +11,7 @@ class VisualOdometry:
     def __init__(self, initial_frame=0, final_frame=120, verbose=False, save_plots=False, save_plots_indices=[]):
 
         self.__initial_frame = initial_frame
-        self.__final_frame = final_frame + 1
+        self.__final_frame = final_frame
         self.__verbose = verbose    
 
         #** Save plots
@@ -170,8 +170,8 @@ class VisualOdometry:
         plot_points(fig, poses2positions([gt_trajectory[self.__initial_frame]]), name='Initial GT pose', mode='markers', color='deepskyblue', size=3)
         plot_points(fig, poses2positions([gt_trajectory[self.__final_frame]]), name='Final GT pose', mode='markers', color='deepskyblue', size=3)
 
-        plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='lines', color='blue', width=3)
-        plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory', mode='lines', color='red', width=5)
+        plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='markers', color='blue', width=3)
+        plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory', mode='markers', color='red', width=5)
 
         plot_points(fig, estimated_world_points_in_world, name='Estimated map', mode='markers', color='orange', size=2)
         plot_points(fig, gt_world_points['position'], name='Ground Truth map', mode='markers', color='green', size=2)

@@ -75,6 +75,12 @@ class ProjectiveICP:
         map = {'position':points_3D, 'appearance':appearances[mask].tolist()}
         self.__update_state(w_T_c1, map)
 
+        print(f'Frame: {frame_index}')
+        print(f'Transformation of frame {frame_index}: w_T_c0 - set to identity.')
+        print(f'Relative transformation between {frame_index} and {frame_index+1}: c0_T_c1 - estimated using 2D-2D correspondences.')
+        print(f'Transformation of frame {frame_index+1}: w_T_c1 = w_T_c0 @ c0_T_c1')
+        print('========================================================================================\n')
+
         return True
 
 
@@ -106,7 +112,11 @@ class ProjectiveICP:
         max_error_index = np.argmax(iterations_results['error'])
         icp_iteration = len(iterations_results['T'])
 
-        print(f'Frame: {frame_index}')
+        print(f'Frame: {frame_index}\n')
+        print(f'Transformation of frame {frame_index}: w_T_c{frame_index} - previous pose')
+        print(f'Relative transformation between {frame_index} and {frame_index+1}: c{frame_index}_T_c{frame_index+1} - estimated using Projective ICP')
+        print(f'Transformation of frame {frame_index+1}: w_T_c{frame_index+1} = w_T_c{frame_index} @ c{frame_index}_T_c{frame_index+1}\n')
+
         print(f'  - Valid transformation:             {is_valid}')
         print(f'  - Num iterations:                   {icp_iteration}\n')
         print(f'  - Error best iteration:             {np.round(iterations_results["error"][min_error_index], 5)} (index: {min_error_index})')
@@ -126,7 +136,7 @@ class ProjectiveICP:
         print(f'  - Mean dumping factor:              {np.round(np.mean(iterations_results["dumping_factor"]))}\n')
 
         print(f'Applied transformation of index {min_error_index} to the camera')
-        print('================================================================\n')
+        print('========================================================================================\n')
 
         plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
 
@@ -233,7 +243,7 @@ class ProjectiveICP:
                 print(f'  - Dumping factor:   {np.round(dumping_factor, 5)}')
                 print('------------------------------------------------------------\n')
 
-        #* If the best iteration has an error greater than 30, ignore the computation and return the current pose
+        #* If the best iteration has an error greater than 1, ignore the computation and return the current pose
         if iterations_results['error'][np.argmin(iterations_results['error'])] > 1:  
             self.__camera.set_c_T_w(np.linalg.inv(self.get_current_pose()))
             return self.get_current_pose(), False, iterations_results

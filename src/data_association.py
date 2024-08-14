@@ -15,7 +15,6 @@ def data_association_on_appearance(set_1, set_2, projection=0, camera=None):
             - If projection is not 1 or 2: {'points_1': [], 'points_2': [], 'appearance': []}
     """
 
-    assert(projection in [0, 1, 2], "Projection should be 0, 1 or 2.")
 
     points_1 = set_1['position']
     appearance_1 = set_1['appearance']
