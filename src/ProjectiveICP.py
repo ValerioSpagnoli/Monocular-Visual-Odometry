@@ -225,7 +225,7 @@ class ProjectiveICP:
             if (dumping_factor*2) <= self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 0.05: stop = True
+            if computation_done and (error < 0.01 or stuck_counter > 100): stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
@@ -372,12 +372,6 @@ class ProjectiveICP:
                 self.__map['position'].append(position)
                 self.__map['appearance'].append(appearance)
                 self.__map['error'].append(error)
-            else:
-                index = self.__map['appearance'].index(appearance)
-                current_error = self.__map['error'][index]
-                if error < current_error:
-                    self.__map['position'][index] = position
-                    self.__map['error'][index] = error
 
     
     def get_current_pose(self): return self.__current_pose
