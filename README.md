@@ -7,8 +7,8 @@
 ## Description
 This project implements a projective ICP based visual odometry to estimate both the trajectory of a robot and the 3D map of the visual features.
 
-## Documentation and Results
-The documentation and the results are hosted on [GitHub Pages - ValerioSpagnoli/VisualOdometry](https://valeriospagnoli.github.io/VisualOdometry/) 
+## Results
+The results are published on [GitHub Pages - ValerioSpagnoli/VisualOdometry](https://valeriospagnoli.github.io/VisualOdometry/) 
 
 
 ## Usage
