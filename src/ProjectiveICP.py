@@ -17,24 +17,26 @@ class ProjectiveICP:
                         min_dumping_factor=1e3, 
                         max_dumping_factor=1e9, 
                         verbose=False, 
-                        save_plots=False, 
-                        save_plots_indices=[]):
+                        save_results=True,
+                        save_icp_plots=False, 
+                        save_icp_plots_indices=[]):
         
         self.__data = data
         self.__camera = camera
        
         self.__num_iterations = num_iterations
         self.__min_inliers = min_inliers
-        self.__kernel_threshold = kernel_threshold
+        self.__base_kernel_threshold = kernel_threshold
         self.__min_kernel_threshold = min_kernel_threshold
         self.__max_kernel_threshold = max_kernel_threshold
-        self.__dumping_factor = dumping_factor
+        self.__base_dumping_factor = dumping_factor
         self.__min_dumping_factor = min_dumping_factor
         self.__max_dumping_factor = max_dumping_factor
        
         self.__verbose = verbose
-        self.__save_plots = save_plots
-        self.__save_plots_indices = save_plots_indices
+        self.__save_results = save_results
+        self.__save_icp_plots = save_icp_plots
+        self.__save_icp_plots_indices = save_icp_plots_indices
         
         #** Trajectory:
         #* list of poses T (4x4 homogeneous matrix)
@@ -86,8 +88,8 @@ class ProjectiveICP:
 
     def update(self, frame_index):
         os.makedirs(f'outputs/frame_{frame_index:02d}', exist_ok=True)
-        if self.__save_plots: 
-            if frame_index in self.__save_plots_indices and os.path.exists(f'outputs/frame_{frame_index:02d}/icp'):
+        if self.__save_icp_plots: 
+            if frame_index in self.__save_icp_plots_indices and os.path.exists(f'outputs/frame_{frame_index:02d}/icp'):
                 os.system(f'rm -r outputs/frame_{frame_index:02d}/icp')
             os.makedirs(f'outputs/frame_{frame_index:02d}/icp', exist_ok=True)
         
@@ -138,7 +140,7 @@ class ProjectiveICP:
         print(f'Applied transformation of index {min_error_index} to the camera')
         print('========================================================================================\n')
 
-        plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
+        if self.__save_results: plot_icp_iterations_results(iterations_results, f'outputs/frame_{frame_index:02d}/results')
 
         #* Update the state
         if is_valid: 
@@ -155,8 +157,8 @@ class ProjectiveICP:
         w_T_c0 = self.get_current_pose()
         
         #* Get the parameters
-        kernel_threshold = self.__kernel_threshold
-        dumping_factor = self.__dumping_factor
+        kernel_threshold = self.__base_kernel_threshold
+        dumping_factor = self.__base_dumping_factor
         
         #* Variables for the stopping criteria
         limit = 10
@@ -182,7 +184,7 @@ class ProjectiveICP:
             current_world_points = np.array(matches['points_2'])
             projected_world_points = np.array(matches['projected_points_2'])
             
-            if self.__save_plots and (len(self.__save_plots_indices) == 0 or frame_index in self.__save_plots_indices):
+            if self.__save_icp_plots and (len(self.__save_icp_plots_indices) == 0 or frame_index in self.__save_icp_plots_indices):
                 projected_world_points = self.__camera.project_points(current_world_points)
                 save_path = f'outputs/frame_{frame_index:02d}/icp/iteration_{icp_iteration}'
                 plot_icp_frame(reference_image_points, projected_world_points, save_path, title=f'Frame: {frame_index}, Iteration: {icp_iteration}', set_1_title='Reference Image Points', set_2_title='Projected World Points')
@@ -235,7 +237,7 @@ class ProjectiveICP:
             iterations_results['dumping_factor'].append(dumping_factor)
             error_prev = error
 
-            if self.__verbose or frame_index in self.__save_plots_indices:
+            if self.__verbose or frame_index in self.__save_icp_plots_indices:
                 print(f'Frame: {frame_index}, Iteration: {icp_iteration}')
                 print(f'  - Error:            {np.round(error, 5)}')
                 print(f'  - Num inliers:      {num_inliers}')

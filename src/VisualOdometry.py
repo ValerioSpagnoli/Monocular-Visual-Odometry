@@ -8,27 +8,43 @@ import numpy as np
 import time
 
 class VisualOdometry:
-    def __init__(self, initial_frame=0, final_frame=120, verbose=False, save_plots=False, save_plots_indices=[]):
+    def __init__(self, initial_frame=0, 
+                       final_frame=120, 
+                       verbose=False, 
+                       save_results=True, 
+                       save_icp_plots=False, 
+                       save_icp_plots_indices=[],
+                       base_kernel_threshold=1500,
+                       min_kernel_threshold=100,
+                       max_kernel_threshold=3*1e3,
+                       base_dumping_factor=1e4,
+                       min_dumping_factor=1e3,
+                       max_dumping_factor=1e9,
+                       min_inliners=10,
+                       num_iterations=300):
 
+
+        #** General parameters
         self.__initial_frame = initial_frame
         self.__final_frame = final_frame
         self.__verbose = verbose    
-
-        #** Save plots
-        self.__save_plots = save_plots
-        self.__save_plots_indices = save_plots_indices
+        self.__save_results = save_results
+        self.__save_icp_plots = save_icp_plots
+        self.__save_icp_plots_indices = save_icp_plots_indices
 
         #** Projective ICP parameters
-        self.__kernel_threshold = 1500
-        self.__min_kernel_threshold = 100
-        self.__max_kernel_threshold = 3*1e3
+        self.__base_kernel_threshold = base_kernel_threshold
+        self.__min_kernel_threshold = min_kernel_threshold
+        self.__max_kernel_threshold = max_kernel_threshold
 
-        self.__dumping_factor = 1e4
-        self.__min_dumping_factor = 1e3
-        self.__max_dumping_factor = 1e9
+        self.__base_dumping_factor = base_dumping_factor
+        self.__min_dumping_factor = min_dumping_factor
+        self.__max_dumping_factor = max_dumping_factor
 
-        self.__min_inliners = 10
-        self.__num_iterations = 300
+        self.__min_inliners = min_inliners
+        self.__num_iterations = num_iterations
+
+        self.__num_of_frames = 0
 
         #** Camera and Data
         self.__camera = Camera()
@@ -39,15 +55,16 @@ class VisualOdometry:
                                             self.__data,
                                             self.__num_iterations,
                                             self.__min_inliners,
-                                            self.__kernel_threshold,
+                                            self.__base_kernel_threshold,
                                             self.__min_kernel_threshold,
                                             self.__max_kernel_threshold,
-                                            self.__dumping_factor,
+                                            self.__base_dumping_factor,
                                             self.__min_dumping_factor,
                                             self.__max_dumping_factor,
                                             self.__verbose,
-                                            self.__save_plots,
-                                            self.__save_plots_indices)
+                                            self.__save_results,
+                                            self.__save_icp_plots,
+                                            self.__save_icp_plots_indices)
 
 
     def run(self):
@@ -65,6 +82,8 @@ class VisualOdometry:
             if not res: 
                 print(f'Not valid transform found at frame {i}. Break.')
                 break
+
+            self.__num_of_frames += 1
         
         end = time.time()
         mean_time_per_frame = np.mean(frame_times)
@@ -143,7 +162,7 @@ class VisualOdometry:
         rmse_world_map = np.sqrt(np.mean(np.linalg.norm(np.array(estimated_world_points_in_world_matched)-np.array(gt_world_points_matched), axis=1)**2))
         num_world_points = len(estimated_world_points_in_world_matched)
 
-        print(f'Number of frames:                  {self.__final_frame-self.__initial_frame}')
+        print(f'Number of frames:                  {self.__num_of_frames}')
         print(f'Number of world points:            {num_world_points}')
         print(f'RMSE world map [m]:                {np.round(rmse_world_map, 5)}\n')
         print(f'scale:                             {np.round(scale, 5)}\n')
@@ -170,8 +189,8 @@ class VisualOdometry:
         plot_points(fig, poses2positions([gt_trajectory[self.__initial_frame]]), name='Initial GT pose', mode='markers', color='deepskyblue', size=3)
         plot_points(fig, poses2positions([gt_trajectory[self.__final_frame]]), name='Final GT pose', mode='markers', color='deepskyblue', size=3)
 
-        plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='markers', color='blue', width=3)
-        plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory', mode='markers', color='red', width=5)
+        plot_points(fig, poses2positions(gt_trajectory), name='Ground Truth trajectory', mode='lines', color='blue', width=3)
+        plot_points(fig, poses2positions(estimated_trajectory_in_world), name='Estimated trajectory', mode='lines', color='red', width=5)
 
         plot_points(fig, estimated_world_points_in_world, name='Estimated map', mode='markers', color='orange', size=2)
         plot_points(fig, gt_world_points['position'], name='Ground Truth map', mode='markers', color='green', size=2)
