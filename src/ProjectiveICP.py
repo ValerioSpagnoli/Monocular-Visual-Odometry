@@ -80,7 +80,7 @@ class ProjectiveICP:
         print(f'Frame: {frame_index}')
         print(f'Transformation of frame {frame_index}: w_T_c0 - set to identity.')
         print(f'Relative transformation between {frame_index} and {frame_index+1}: c0_T_c1 - estimated using 2D-2D correspondences.')
-        print(f'Transformation of frame {frame_index+1}: w_T_c1 = w_T_c0 @ c0_T_c1')
+        print(f'Transformation of frame {frame_index+1}: w_T_c1 = w_T_c0 c0_T_c1')
         print('========================================================================================\n')
 
         return True
@@ -116,8 +116,8 @@ class ProjectiveICP:
 
         print(f'Frame: {frame_index}\n')
         print(f'Transformation of frame {frame_index}: w_T_c{frame_index} - previous pose')
-        print(f'Relative transformation between {frame_index} and {frame_index+1}: c{frame_index}_T_c{frame_index+1} - estimated using Projective ICP')
-        print(f'Transformation of frame {frame_index+1}: w_T_c{frame_index+1} = w_T_c{frame_index} @ c{frame_index}_T_c{frame_index+1}\n')
+        print(f'Relative transformation between {frame_index} and {frame_index+1}: c{frame_index}_T_c{frame_index+1} - estimated using PICP')
+        print(f'Transformation of frame {frame_index+1}: w_T_c{frame_index+1} = w_T_c{frame_index} c{frame_index}_T_c{frame_index+1}\n')
 
         print(f'  - Valid transformation:             {is_valid}')
         print(f'  - Num iterations:                   {icp_iteration}\n')
@@ -225,7 +225,7 @@ class ProjectiveICP:
             if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 1e-4: stop = True
+            if computation_done and error < 1e-3: stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
@@ -246,7 +246,7 @@ class ProjectiveICP:
                 print('------------------------------------------------------------\n')
 
         #* If the best iteration has an error greater than 1, ignore the computation and return the current pose
-        if iterations_results['error'][np.argmin(iterations_results['error'])] > 1:  
+        if iterations_results['error'][np.argmin(iterations_results['error'])] > 1.5:  
             self.__camera.set_c_T_w(np.linalg.inv(self.get_current_pose()))
             return self.get_current_pose(), False, iterations_results
 
@@ -268,7 +268,11 @@ class ProjectiveICP:
         #* Solve the system and update the pose
         H += np.eye(6) * dumping_factor
         dx = np.linalg.lstsq(H, -b, rcond=None)[0]
-        w_T_c1 = v2T(dx) @ w_T_c0
+        #w_T_c1 = v2T(dx) @ w_T_c0
+        w_T_c1 = w_T_c0 @ v2T(dx)
+
+        # dx = c0_T_c1
+        # w_T_c1 = w_T_c0 @ c0_T_c1
 
         return {'T': w_T_c1, 'num_inliers': num_inliers, 'error': error, 'computation_done': True}
     

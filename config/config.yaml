@@ -1,6 +1,6 @@
 general:
   initial_frame: 0            # frame of the data to start with
-  final_frame: 50             # frame of the data to end with
+  final_frame: 120             # frame of the data to end with
   verbose: False              # print additional information for each iteration of PICP
   save_results: True          # save plot of the results of each frame
   save_icp_plots: False       # save the results of the PICP iterations (warning: can be very slow)
@@ -10,15 +10,16 @@ general:
 picp:
 
   # kernel threshold used to reject outliers
-  base_kernel_threshold: 1500 # initial threshold for the kernel
-  min_kernel_threshold: 100   # minimum threshold for the kernel
-  max_kernel_threshold: 3000  # maximum threshold for the kernel
+  base_kernel_threshold: 1000 # initial threshold for the kernel
+  min_kernel_threshold: 10   # minimum threshold for the kernel
+  max_kernel_threshold: 2000  # maximum threshold for the kernel
 
   # dumping factor used to update the pose. The larger the factor, the less the pose is updated
-  base_dumping_factor: 1e4    # initial dumping factor
-  min_dumping_factor: 1e3     # minimum dumping factor
-  max_dumping_factor: 1e9     # maximum dumping factor
+  base_dumping_factor: 10    # initial dumping factor
+  min_dumping_factor: 1     # minimum dumping factor
+  max_dumping_factor: 100     # maximum dumping factor
 
-  min_inliers: 10             # minimum number of inliers to consider the pose as valid
+  min_inliers: 15             # minimum number of inliers to consider the pose as valid
 
-  num_iterations: 300         # maximum number of iterations for the PICP algorithm
+
+  num_iterations: 250         # maximum number of iterations for the PICP algorithm
