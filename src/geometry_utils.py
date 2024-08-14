@@ -75,9 +75,12 @@ def triangulate_points(points_0, points_1, w_T_c0, w_T_c1, K, threshold=30):
     points_4D = cv2.triangulatePoints(P_0, P_1, points_0.T, points_1.T)
 
     points_3D = (points_4D[:3] / points_4D[3]).T
+    mask_depth = (points_3D[:, 2] > 0)# & (points_3D[:, 2] <= 5)
 
     points_3D_norms = np.linalg.norm(points_3D, axis=1)
-    mask = points_3D_norms < threshold
+    mask_norms = points_3D_norms < threshold 
+
+    mask = mask_depth & mask_norms
 
     points_3D_filtered = points_3D[mask]
     points_4D = np.hstack((points_3D_filtered, np.ones((points_3D_filtered.shape[0], 1))))

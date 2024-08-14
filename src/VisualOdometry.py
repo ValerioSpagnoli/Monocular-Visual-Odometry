@@ -127,10 +127,10 @@ class VisualOdometry:
 
             t_rel_est = rel_pose_est[:3,3]
             t_rel_gt = rel_pose_gt[:3,3]
-            translation_error_ratio = np.linalg.norm(t_rel_est)/np.linalg.norm(t_rel_gt)
+            translation_error_ratio = np.linalg.norm(t_rel_gt)/np.linalg.norm(t_rel_est)
             translation_errors['ratio'].append(translation_error_ratio)
 
-            scale = 1/translation_error_ratio
+            scale = translation_error_ratio
             scales.append(scale)
             translation_errors['error'].append(np.linalg.norm(scale*estimated_trajectory_in_world[i][:3,3]-gt_trajectory[i][:3,3]))
 
