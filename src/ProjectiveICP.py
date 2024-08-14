@@ -196,7 +196,7 @@ class ProjectiveICP:
             error = results['error']  
             computation_done = results['computation_done']
 
-            #* Update the kernel threshold based on the number of inliers              
+            #* Update the kernel threshold based on the number of inliers        
             if num_inliers == len(reference_image_points): 
                 kernel_threshold = self.__min_kernel_threshold
             elif num_inliers < self.__min_inliers:
@@ -221,11 +221,11 @@ class ProjectiveICP:
             else: flickering_counter = 0
 
             #* Update the dumping factor based on the stuck and flickering counters
-            if (dumping_factor/2) > self.__min_dumping_factor and (stuck_counter > limit or (stuck_counter == 0 and flickering_counter == 0)): dumping_factor /= 2
-            if (dumping_factor*2) < self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
+            if (dumping_factor/2) >= self.__min_dumping_factor and (stuck_counter > limit or (stuck_counter == 0 and flickering_counter == 0)): dumping_factor /= 2
+            if (dumping_factor*2) <= self.__max_dumping_factor and flickering_counter > limit: dumping_factor *= 2
             
             #* If the computation is valid and the error is small, stop the ICP algorithm
-            if computation_done and error < 1e-1: stop = True
+            if computation_done and error < 0.05: stop = True
             
             #* Update the state
             w_T_c0 = w_T_c1
@@ -246,7 +246,7 @@ class ProjectiveICP:
                 print('------------------------------------------------------------\n')
 
         #* If the best iteration has an error greater than 1, ignore the computation and return the current pose
-        if iterations_results['error'][np.argmin(iterations_results['error'])] > 1.5:  
+        if iterations_results['error'][np.argmin(iterations_results['error'])] > 5:  
             self.__camera.set_c_T_w(np.linalg.inv(self.get_current_pose()))
             return self.get_current_pose(), False, iterations_results
 

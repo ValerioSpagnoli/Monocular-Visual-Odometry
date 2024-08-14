@@ -15,11 +15,10 @@ picp:
   max_kernel_threshold: 2000  # maximum threshold for the kernel
 
   # dumping factor used to update the pose. The larger the factor, the less the pose is updated
-  base_dumping_factor: 10    # initial dumping factor
+  base_dumping_factor: 16    # initial dumping factor
   min_dumping_factor: 1     # minimum dumping factor
-  max_dumping_factor: 100     # maximum dumping factor
+  max_dumping_factor: 16     # maximum dumping factor
 
   min_inliers: 15             # minimum number of inliers to consider the pose as valid
 
-
-  num_iterations: 250         # maximum number of iterations for the PICP algorithm
+  num_iterations: 300         # maximum number of iterations for the PICP algorithm
