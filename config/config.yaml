@@ -19,6 +19,6 @@ picp:
   min_dumping_factor: 1       # minimum dumping factor
   max_dumping_factor: 64      # maximum dumping factor
 
-  min_inliers: 20             # minimum number of inliers to consider the pose as valid
+  min_inliers: 10             # minimum number of inliers to consider the pose as valid
 
   num_iterations: 250         # maximum number of iterations for the PICP algorithm
