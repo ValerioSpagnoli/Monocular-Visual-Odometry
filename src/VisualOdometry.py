@@ -119,16 +119,18 @@ class VisualOdometry:
             rel_pose_gt = np.linalg.inv(gt_trajectory[i]) @ gt_trajectory[i+1]
             rel_poses['gt'].append(rel_pose_gt)
 
-            R_error = np.round(rel_pose_est[:3,:3],5)
-            rotation_error = np.arccos((np.trace(R_error)-1)/2)
+            error_T = np.linalg.inv(rel_pose_est) @ rel_pose_gt
+
+            error_R = np.round(error_T[:3,:3],5)
+            rotation_error = np.arccos((np.trace(error_R)-1)/2)
             errors['rotation'].append(rotation_error)
 
             rotation_ratio = np.linalg.norm(estimated_trajectory_in_world[i][:3,:3], 'fro')/np.linalg.norm(gt_trajectory[i][:3,:3], 'fro')
-            translation_ratio = np.linalg.norm(estimated_trajectory_in_world[i+1][:3,3])/np.linalg.norm(gt_trajectory[i+1][:3,3])
+            translation_ratio = np.linalg.norm(gt_trajectory[i][:3,3])/np.linalg.norm(estimated_trajectory_in_world[i][:3,3])
             ratios['rotation'].append(rotation_ratio)
             ratios['translation'].append(translation_ratio)
 
-            scale = 1/translation_ratio
+            scale = translation_ratio
             scales.append(scale)
             errors['translation'].append(np.linalg.norm(scale*estimated_trajectory_in_world[i][:3,3]-gt_trajectory[i][:3,3]))
 
