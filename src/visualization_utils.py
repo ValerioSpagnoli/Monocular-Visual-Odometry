@@ -140,18 +140,19 @@ def plot_icp_iterations_results(iterations_results, save_path):
     plt.savefig(f'{save_path}.png')
     plt.close(fig)
 
-def plot_final_results(rotation_errors, translation_errors, save_path):
-    rotation_errors_rad = rotation_errors['rad']
-    translation_errors_ratio = translation_errors['ratio']
-    translation_errors = translation_errors['error']
+def plot_final_results(errors, ratios, save_path):
+    rotation_errors = errors['rotation']
+    translation_errors = errors['translation']
+    translation_errors_ratio = ratios['translation']
 
     fig, ax = plt.subplots(1, 3, figsize=(15, 5))
 
-    x_ticks = np.arange(0, len(rotation_errors_rad), 5)
-    if len(rotation_errors_rad)-1 not in x_ticks: x_ticks = np.append(x_ticks, len(rotation_errors_rad)-1)
-    x_tick_labels = [str(x) for x in x_ticks]
+    x_ticks = np.arange(0, len(rotation_errors), 5)
+    if len(rotation_errors)-1 not in x_ticks: x_ticks = np.append(x_ticks, len(rotation_errors)-1)
+    x_tick_labels = [str(x) if x%10==0 else '' for x in x_ticks]
+    x_tick_labels[-1] = str(len(rotation_errors)-1)
 
-    ax[0].plot(rotation_errors_rad)
+    ax[0].plot(rotation_errors)
     ax[0].set_title('Rotation Errors [rad]')
     ax[0].set_xlabel('Frame')
     ax[0].set_ylabel('Error [rad]')
