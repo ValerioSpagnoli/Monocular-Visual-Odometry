@@ -6,9 +6,7 @@ general:
   save_icp_plots: False       # save the results of the PICP iterations (warning: can be very slow)
   save_icp_plots_indices: []  # save plots of the PICP iterations for the specified indices
 
-
 picp:
-
   # kernel threshold used to reject outliers
   base_kernel_threshold: 1000 # initial threshold for the kernel
   min_kernel_threshold: 10    # minimum threshold for the kernel
