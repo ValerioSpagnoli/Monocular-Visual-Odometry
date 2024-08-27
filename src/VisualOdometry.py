@@ -186,6 +186,24 @@ class VisualOdometry:
         print(f'Min translation ratio:       {np.round(min_translation_ratio, 3)}')
         print(f'Mean translation ratio:      {np.round(mean_translation_ratio, 3)}\n')
 
+        # save the estimated trajectory in a .dat file with id, x, y, z
+        with open("outputs/final_results/estimated_trajectory.dat", "w") as file:
+            for i, pose in enumerate(estimated_trajectory_in_world):
+                x, y, z = pose[:3,3]
+                file.write(f'{i} {x} {y} {z}\n')
+
+        # save the estimated world points in a .dat file with id, x, y, z and appearance
+        with open("outputs/final_results/estimated_world_points.dat", "w") as file:
+            for i, point in enumerate(estimated_world_points_in_world):
+                x, y, z = point
+                appearance = estimated_world_points['appearance'][i]
+                file.write(f'{i} {x} {y} {z} {appearance[0]} {appearance[1]} {appearance[2]} {appearance[3]} {appearance[4]} {appearance[5]} {appearance[6]} {appearance[7]} {appearance[8]} {appearance[9]}\n')
+
+        # save the error values in a .dat file as rotation_error, rotation_ratio, translation_error, translation_ratio
+        with open("outputs/final_results/errors.dat", "w") as file:
+            for i in range(len(errors['rotation'])):
+                file.write(f'{i} {errors["rotation"][i]} {ratios["rotation"][i]} {errors["translation"][i]} {ratios["translation"][i]}\n')
+
         fig = go.Figure()
         plot_points(fig, poses2positions([gt_trajectory[self.__initial_frame]]), name='Initial GT pose', mode='markers', color='deepskyblue', size=3)
         plot_points(fig, poses2positions([gt_trajectory[self.__final_frame]]), name='Final GT pose', mode='markers', color='deepskyblue', size=3)
